@@ -45,13 +45,21 @@ class StockCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                        Text(
+                          name,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
                         const SizedBox(height: 4),
-                        Text(code, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600)),
+                        Text(
+                          code,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey.shade600),
+                        ),
                       ],
                     ),
                   ),
-                  if (trailing case final trailingWidget) trailingWidget,
+                  if (trailing != null) trailing!,
                 ],
               ),
               const SizedBox(height: 12),
@@ -62,7 +70,8 @@ class StockCard extends StatelessWidget {
                 children: [
                   Text(
                     Formatters.price(price),
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   Text(
                     Formatters.percent(changePct),
@@ -74,12 +83,16 @@ class StockCard extends StatelessWidget {
                   status,
                 ],
               ),
-              if (subtitle case final subtitleWidget) ...[
+              if (subtitle != null) ...[
                 const SizedBox(height: 12),
-                subtitleWidget,
+                subtitle!,
               ],
               const SizedBox(height: 12),
-              Text(summary, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade800)),
+              Text(
+                summary,
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: Colors.grey.shade800),
+              ),
             ],
           ),
         ),

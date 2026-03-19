@@ -50,7 +50,11 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              Text('오늘의 관찰 포인트', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                '오늘의 관찰 포인트',
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 8),
               Card(
                 child: Padding(
@@ -153,13 +157,21 @@ class _SectionHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 4),
-              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700)),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodyMedium
+                    ?.copyWith(color: Colors.grey.shade700),
+              ),
             ],
           ),
         ),
-        if (action case final actionWidget) actionWidget,
+        if (action != null) action!,
       ],
     );
   }
@@ -178,7 +190,11 @@ class _SignalCard extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text('$count', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700)),
+            Text(
+              '$count',
+              style: Theme.of(context).textTheme.headlineMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 4),
             Text(label, style: Theme.of(context).textTheme.bodyMedium),
           ],
