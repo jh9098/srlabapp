@@ -22,3 +22,4 @@ class Stock(TimestampMixin, ActiveMixin, Base):
     price_levels = relationship("PriceLevel", back_populates="stock", cascade="all, delete-orphan")
     support_states = relationship("SupportState", back_populates="stock", cascade="all, delete-orphan")
     watchlists = relationship("Watchlist", back_populates="stock", cascade="all, delete-orphan")
+    daily_bars = relationship("DailyBar", back_populates="stock", cascade="all, delete-orphan")
