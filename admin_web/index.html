@@ -1,170 +1,77 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>지지저항Lab Admin</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; background:#f5f6fa; color:#222; }
-    header { background:#111827; color:#fff; padding:16px 24px; }
-    main { padding:16px; display:grid; gap:16px; }
-    section { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,.06); }
-    h2 { margin-top:0; }
-    .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
-    .card { background:#eef2ff; padding:12px; border-radius:10px; }
-    table { width:100%; border-collapse:collapse; font-size:14px; }
-    th, td { border-bottom:1px solid #e5e7eb; padding:8px; text-align:left; vertical-align:top; }
-    input, textarea, select, button { width:100%; padding:8px; margin-top:6px; box-sizing:border-box; }
-    button { background:#2563eb; color:#fff; border:none; border-radius:8px; cursor:pointer; }
-    button.secondary { background:#4b5563; }
-    .two { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
-    pre { white-space:pre-wrap; word-break:break-word; }
-  </style>
-</head>
-<body>
-<header>
-  <h1>지지저항Lab 운영 관리자</h1>
-  <p>예쁜 UI보다 운영 가능성에 초점을 둔 MVP 관리자 화면입니다.</p>
-</header>
-<main>
-  <section>
-    <div style="display:flex; gap:12px; flex-wrap:wrap;">
-      <label style="flex:1; min-width:220px;">API Base URL<input id="baseUrl" value="http://127.0.0.1:8000/api/v1" /></label>
-      <label style="flex:1; min-width:220px;">Admin Identifier<input id="adminId" value="admin-local" /></label>
-      <button style="max-width:180px; align-self:end;" onclick="loadAll()">전체 새로고침</button>
-    </div>
-  </section>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>지지저항Lab Admin</title>
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Local MVP Admin</p>
+          <h1>지지저항Lab 관리자</h1>
+          <p class="subtext">환경변수 기반 관리자 계정으로 로그인한 뒤 종목/레벨/상태/이벤트/홈노출/테마/푸시를 점검합니다.</p>
+        </div>
+        <button id="logoutButton" class="ghost-button" hidden>로그아웃</button>
+      </header>
 
-  <section>
-    <h2>대시보드</h2>
-    <div id="dashboard" class="grid"></div>
-  </section>
+      <section class="panel" id="loginPanel">
+        <h2>관리자 로그인</h2>
+        <div class="grid two-column">
+          <label>
+            <span>API Base URL</span>
+            <input id="apiBaseUrl" value="http://127.0.0.1:8000/api/v1" />
+          </label>
+          <label>
+            <span>관리자 아이디</span>
+            <input id="adminUsername" value="admin" />
+          </label>
+          <label>
+            <span>비밀번호</span>
+            <input id="adminPassword" type="password" value="admin1234" />
+          </label>
+        </div>
+        <button id="loginButton">로그인</button>
+        <p id="loginMessage" class="message"></p>
+      </section>
 
-  <section class="two">
-    <div>
-      <h2>종목 관리</h2>
-      <form id="stockForm">
-        <input name="code" placeholder="종목코드" required />
-        <input name="name" placeholder="종목명" required />
-        <select name="market_type"><option>KOSPI</option><option>KOSDAQ</option><option>ETF</option><option>ETN</option><option>OTHER</option></select>
-        <input name="sector" placeholder="섹터" />
-        <input name="theme_tags" placeholder="테마 태그" />
-        <textarea name="operator_memo" placeholder="운영 메모"></textarea>
-        <label><input type="checkbox" name="is_active" checked /> 활성</label>
-        <button type="submit">종목 저장</button>
-      </form>
-      <div id="stocks"></div>
-    </div>
-    <div>
-      <h2>가격 레벨 관리</h2>
-      <form id="levelForm">
-        <input name="stock_id" placeholder="stock_id" required />
-        <select name="level_type"><option>SUPPORT</option><option>RESISTANCE</option></select>
-        <input name="price" placeholder="가격" required />
-        <input name="proximity_threshold_pct" placeholder="근접 임계치" value="1.50" />
-        <input name="rebound_threshold_pct" placeholder="반등 임계치" value="5.00" />
-        <input name="source_label" placeholder="source_label" value="operator" />
-        <textarea name="note" placeholder="메모"></textarea>
-        <label><input type="checkbox" name="is_active" checked /> 활성</label>
-        <button type="submit">레벨 저장</button>
-      </form>
-      <div id="levels"></div>
-    </div>
-  </section>
+      <section class="panel" id="dashboardPanel" hidden>
+        <h2>세션 / 대시보드</h2>
+        <div class="grid stats" id="dashboardStats"></div>
+      </section>
 
-  <section class="two">
-    <div>
-      <h2>지지선 상태 조회 / 강제 수정</h2>
-      <div id="states"></div>
-    </div>
-    <div>
-      <h2>수동 푸시 발송</h2>
-      <form id="pushForm">
-        <input name="user_identifier" placeholder="user_identifier" required />
-        <input name="title" placeholder="제목" required />
-        <textarea name="message" placeholder="메시지" required></textarea>
-        <input name="target_path" placeholder="target_path" value="/notifications" />
-        <textarea name="memo" placeholder="발송 사유 memo" required></textarea>
-        <button type="submit">수동 푸시 저장</button>
-      </form>
-      <h2>홈 노출 관리</h2>
-      <form id="homeForm">
-        <textarea name="items" rows="5" placeholder='[{"stock_id":1,"display_order":1,"is_active":true}]'></textarea>
-        <button type="submit">홈 노출 저장</button>
-      </form>
-    </div>
-  </section>
+      <section class="panel" id="manualPushPanel" hidden>
+        <h2>수동 푸시 발송</h2>
+        <div class="grid two-column">
+          <label><span>User Identifier</span><input id="pushUserIdentifier" value="demo-user" /></label>
+          <label><span>딥링크 경로</span><input id="pushTargetPath" value="/notifications" /></label>
+          <label><span>제목</span><input id="pushTitle" value="운영 공지" /></label>
+          <label><span>메모</span><input id="pushMemo" value="로컬 관리자 테스트" /></label>
+          <label class="full"><span>메시지</span><textarea id="pushMessage">수동 발송 테스트 메시지입니다.</textarea></label>
+        </div>
+        <button id="pushButton">수동 푸시 저장/전송 시도</button>
+        <p id="pushMessageStatus" class="message"></p>
+      </section>
 
-  <section class="two">
-    <div>
-      <h2>신호 이벤트 조회</h2>
-      <div id="events"></div>
+      <section class="panel" id="resourcesPanel" hidden>
+        <div class="section-title-row">
+          <h2>운영 데이터 확인</h2>
+          <button id="refreshButton" class="ghost-button">새로고침</button>
+        </div>
+        <div class="resource-grid">
+          <article><h3>종목</h3><pre id="stocksOutput"></pre></article>
+          <article><h3>가격 레벨</h3><pre id="levelsOutput"></pre></article>
+          <article><h3>지지 상태</h3><pre id="statesOutput"></pre></article>
+          <article><h3>신호 이벤트</h3><pre id="eventsOutput"></pre></article>
+          <article><h3>홈 노출</h3><pre id="featuredOutput"></pre></article>
+          <article><h3>테마</h3><pre id="themesOutput"></pre></article>
+          <article class="wide"><h3>감사 로그</h3><pre id="logsOutput"></pre></article>
+        </div>
+      </section>
     </div>
-    <div>
-      <h2>테마 관리</h2>
-      <form id="themeForm">
-        <input name="name" placeholder="테마명" required />
-        <input name="score" placeholder="점수" />
-        <textarea name="summary" placeholder="요약"></textarea>
-        <textarea name="stocks" rows="5" placeholder='[{"stock_id":1,"role_type":"LEADER","score":90}]'></textarea>
-        <label><input type="checkbox" name="is_active" checked /> 활성</label>
-        <button type="submit">테마 저장</button>
-      </form>
-      <div id="themes"></div>
-    </div>
-  </section>
 
-  <section>
-    <h2>운영 로그 조회</h2>
-    <div id="logs"></div>
-  </section>
-</main>
-<script>
-const el = id => document.getElementById(id);
-function api(path, options = {}) {
-  const base = el('baseUrl').value.replace(/\/$/, '');
-  return fetch(`${base}${path}`, {
-    headers: { 'Content-Type': 'application/json', 'X-Admin-Identifier': el('adminId').value, ...(options.headers || {}) },
-    ...options,
-  }).then(r => r.json());
-}
-function table(container, rows) {
-  if (!rows?.length) { container.innerHTML = '<p>데이터가 없습니다.</p>'; return; }
-  const keys = Object.keys(rows[0]);
-  container.innerHTML = `<table><thead><tr>${keys.map(k => `<th>${k}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${keys.map(k => `<td>${typeof row[k] === 'object' ? JSON.stringify(row[k]) : row[k] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-}
-async function loadAll() {
-  const dashboard = await api('/admin/dashboard');
-  el('dashboard').innerHTML = Object.entries(dashboard.data).map(([k,v]) => `<div class="card"><strong>${k}</strong><div>${v}</div></div>`).join('');
-  table(el('stocks'), (await api('/admin/stocks')).data);
-  table(el('levels'), (await api('/admin/price-levels')).data);
-  const states = (await api('/admin/support-states')).data;
-  el('states').innerHTML = states.map(s => `
-    <div class="card">
-      <strong>${s.stock_name} (${s.stock_code})</strong><br/>${s.status}<br/>${s.status_reason || ''}
-      <select id="status-${s.id}"><option>WAITING</option><option>TESTING_SUPPORT</option><option>DIRECT_REBOUND_SUCCESS</option><option>BREAK_REBOUND_SUCCESS</option><option>REUSABLE</option><option>INVALID</option></select>
-      <textarea id="memo-${s.id}" placeholder="수정 사유 memo"></textarea>
-      <button onclick="forceState(${s.id})">상태 강제 수정</button>
-    </div>`).join('');
-  table(el('events'), (await api('/admin/signal-events')).data);
-  table(el('themes'), (await api('/admin/themes')).data);
-  table(el('logs'), (await api('/admin/audit-logs')).data.items);
-}
-async function forceState(id) {
-  await api(`/admin/support-states/${id}/force`, { method: 'PATCH', body: JSON.stringify({ status: el(`status-${id}`).value, memo: el(`memo-${id}`).value || '운영자 수정' }) });
-  loadAll();
-}
-function formJson(form) {
-  const data = Object.fromEntries(new FormData(form).entries());
-  for (const box of form.querySelectorAll('input[type="checkbox"]')) data[box.name] = box.checked;
-  return data;
-}
-el('stockForm').onsubmit = async e => { e.preventDefault(); await api('/admin/stocks', { method: 'POST', body: JSON.stringify(formJson(e.target)) }); e.target.reset(); loadAll(); };
-el('levelForm').onsubmit = async e => { e.preventDefault(); await api('/admin/price-levels', { method: 'POST', body: JSON.stringify(formJson(e.target)) }); e.target.reset(); loadAll(); };
-el('pushForm').onsubmit = async e => { e.preventDefault(); await api('/admin/manual-push', { method: 'POST', body: JSON.stringify(formJson(e.target)) }); e.target.reset(); loadAll(); };
-el('homeForm').onsubmit = async e => { e.preventDefault(); const payload = { items: JSON.parse(formJson(e.target).items || '[]') }; await api('/admin/home-featured', { method: 'PUT', body: JSON.stringify(payload) }); loadAll(); };
-el('themeForm').onsubmit = async e => { e.preventDefault(); const payload = formJson(e.target); payload.stocks = JSON.parse(payload.stocks || '[]'); await api('/admin/themes', { method: 'POST', body: JSON.stringify(payload) }); e.target.reset(); loadAll(); };
-loadAll();
-</script>
-</body>
+    <script src="./assets/app.js" defer></script>
+  </body>
 </html>

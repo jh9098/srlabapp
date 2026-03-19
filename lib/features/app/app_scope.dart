@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
+import '../../core/push/push_notification_service.dart';
 import '../home/data/home_repository.dart';
 import '../notifications/data/notification_repository.dart';
 import '../shared/controllers/watchlist_controller.dart';
@@ -20,6 +21,10 @@ class AppScope extends InheritedWidget {
         themeRepository = ThemeRepository(ApiClient(config: config)),
         watchlistRepository = WatchlistRepository(ApiClient(config: config)),
         notificationRepository = NotificationRepository(ApiClient(config: config)),
+        pushNotificationService = PushNotificationService(
+          config: config,
+          apiClient: ApiClient(config: config),
+        ),
         watchlistController = WatchlistController(WatchlistRepository(ApiClient(config: config)));
 
   final AppConfig config;
@@ -29,6 +34,7 @@ class AppScope extends InheritedWidget {
   final ThemeRepository themeRepository;
   final WatchlistRepository watchlistRepository;
   final NotificationRepository notificationRepository;
+  final PushNotificationService pushNotificationService;
   final WatchlistController watchlistController;
 
   static AppScope of(BuildContext context) {
