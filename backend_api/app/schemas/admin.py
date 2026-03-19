@@ -4,6 +4,25 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 
+
+
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class AdminLoginResponseData(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in_seconds: int
+    admin_username: str
+
+
+class AdminSessionResponseData(BaseModel):
+    admin_username: str
+    role: str
+
+
 class AdminStockUpsertRequest(BaseModel):
     code: str
     name: str

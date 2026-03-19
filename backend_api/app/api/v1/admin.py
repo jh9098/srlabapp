@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.errors import AppError
 from app.db.session import get_db
 from app.models.enums import SupportStatus
 from app.schemas.admin import (
     AdminAuditLogItem,
     AdminAuditLogsResponseData,
+    AdminLoginRequest,
+    AdminLoginResponseData,
     AdminPriceLevelUpsertRequest,
+    AdminSessionResponseData,
     AdminStateForceUpdateRequest,
     AdminStockUpsertRequest,
     HomeFeaturedUpdateRequest,
@@ -15,24 +19,55 @@ from app.schemas.admin import (
     ThemeUpsertRequest,
 )
 from app.schemas.common import ApiResponse
+from app.services.admin_auth_service import AdminAuthService, get_admin_bearer_token
 from app.services.admin_service import AdminService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def get_admin_actor(x_admin_identifier: str | None = Header(default="admin-local")) -> str:
-    if not x_admin_identifier:
-        raise AppError(message="X-Admin-Identifier header is required.", error_code="ADMIN_AUTH_REQUIRED", status_code=401)
-    return x_admin_identifier
+def get_admin_actor(token: str = Depends(get_admin_bearer_token)) -> str:
+    return AdminAuthService().decode_token(token).sub
+
+
+@router.post("/auth/login", response_model=ApiResponse[AdminLoginResponseData])
+def admin_login(payload: AdminLoginRequest) -> ApiResponse[AdminLoginResponseData]:
+    settings = get_settings()
+    access_token = AdminAuthService().authenticate(username=payload.username, password=payload.password)
+    return ApiResponse(
+        message="관리자 로그인이 완료되었습니다.",
+        data=AdminLoginResponseData(
+            access_token=access_token,
+            expires_in_seconds=settings.admin_token_expire_minutes * 60,
+            admin_username=payload.username,
+        ),
+    )
+
+
+@router.get("/auth/me", response_model=ApiResponse[AdminSessionResponseData])
+def admin_session(actor_identifier: str = Depends(get_admin_actor)) -> ApiResponse[AdminSessionResponseData]:
+    return ApiResponse(
+        message="현재 관리자 세션입니다.",
+        data=AdminSessionResponseData(admin_username=actor_identifier, role="ADMIN"),
+    )
 
 
 @router.get("/dashboard", response_model=ApiResponse[dict])
-def get_dashboard(db: Session = Depends(get_db)) -> ApiResponse[dict]:
-    return ApiResponse(message="관리자 대시보드 요약입니다.", data=AdminService(db).list_dashboard())
+def get_dashboard(
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict]:
+    return ApiResponse(
+        message="관리자 대시보드 요약입니다.",
+        data={**AdminService(db).list_dashboard(), "admin_username": actor_identifier},
+    )
 
 
 @router.get("/stocks", response_model=ApiResponse[list[dict]])
-def list_stocks(db: Session = Depends(get_db)) -> ApiResponse[list[dict]]:
+def list_stocks(
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[dict]]:
+    _ = actor_identifier
     items = AdminService(db).list_stocks()
     return ApiResponse(message="종목 목록입니다.", data=[{
         "id": item.id, "code": item.code, "name": item.name, "market_type": item.market_type.value,
@@ -54,7 +89,11 @@ def upsert_stock(
 
 
 @router.get("/price-levels", response_model=ApiResponse[list[dict]])
-def list_price_levels(db: Session = Depends(get_db)) -> ApiResponse[list[dict]]:
+def list_price_levels(
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[dict]]:
+    _ = actor_identifier
     items = AdminService(db).list_price_levels()
     return ApiResponse(message="가격 레벨 목록입니다.", data=[{
         "id": item.id, "stock_id": item.stock_id, "stock_name": item.stock.name if item.stock else None,
@@ -77,7 +116,11 @@ def upsert_price_level(
 
 
 @router.get("/support-states", response_model=ApiResponse[list[dict]])
-def list_support_states(db: Session = Depends(get_db)) -> ApiResponse[list[dict]]:
+def list_support_states(
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[dict]]:
+    _ = actor_identifier
     items = AdminService(db).list_support_states()
     return ApiResponse(message="지지선 상태 목록입니다.", data=[{
         "id": item.id, "stock_name": item.stock.name if item.stock else None, "stock_code": item.stock.code if item.stock else None,
@@ -101,7 +144,11 @@ def force_update_support_state(
 
 
 @router.get("/signal-events", response_model=ApiResponse[list[dict]])
-def list_signal_events(db: Session = Depends(get_db)) -> ApiResponse[list[dict]]:
+def list_signal_events(
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[dict]]:
+    _ = actor_identifier
     items = AdminService(db).list_signal_events()
     return ApiResponse(message="신호 이벤트 목록입니다.", data=[{
         "id": item.id, "stock_name": item.stock.name if item.stock else None, "signal_type": item.signal_type.value,
@@ -111,7 +158,11 @@ def list_signal_events(db: Session = Depends(get_db)) -> ApiResponse[list[dict]]
 
 
 @router.get("/home-featured", response_model=ApiResponse[list[dict]])
-def list_home_featured(db: Session = Depends(get_db)) -> ApiResponse[list[dict]]:
+def list_home_featured(
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[dict]]:
+    _ = actor_identifier
     items = AdminService(db).list_home_featured()
     return ApiResponse(message="홈 노출 목록입니다.", data=[{
         "id": item.id, "stock_id": item.stock_id, "stock_name": item.stock.name if item.stock else None,
@@ -131,7 +182,11 @@ def replace_home_featured(
 
 
 @router.get("/themes", response_model=ApiResponse[list[dict]])
-def list_themes(db: Session = Depends(get_db)) -> ApiResponse[list[dict]]:
+def list_themes(
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[dict]]:
+    _ = actor_identifier
     items = AdminService(db).list_themes()
     return ApiResponse(message="관리자 테마 목록입니다.", data=[{
         "id": item.id, "name": item.name, "score": str(item.score) if item.score is not None else None,
@@ -154,7 +209,12 @@ def upsert_theme(
 
 
 @router.get("/audit-logs", response_model=ApiResponse[AdminAuditLogsResponseData])
-def list_audit_logs(limit: int = Query(100, ge=1, le=200), db: Session = Depends(get_db)) -> ApiResponse[AdminAuditLogsResponseData]:
+def list_audit_logs(
+    limit: int = Query(100, ge=1, le=200),
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[AdminAuditLogsResponseData]:
+    _ = actor_identifier
     items = AdminService(db).list_audit_logs(limit=limit)
     return ApiResponse(
         message="운영 로그 목록입니다.",

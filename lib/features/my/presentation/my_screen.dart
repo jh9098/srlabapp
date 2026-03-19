@@ -44,10 +44,10 @@ class MyScreen extends StatelessWidget {
                 onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
               ),
               const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.contact_support_outlined),
-                title: const Text('문의 / 공지'),
-                subtitle: const Text('운영 공지는 추후 연결 예정입니다.'),
+              const ListTile(
+                leading: Icon(Icons.contact_support_outlined),
+                title: Text('문의 / 공지'),
+                subtitle: Text('운영 공지는 추후 연결 예정입니다.'),
               ),
             ],
           ),
@@ -63,6 +63,7 @@ class MyScreen extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text('API: ${config.apiBaseUrl}'),
                 Text('사용자 식별자: ${config.userIdentifier}'),
+                Text('Firebase 설정 여부: ${config.isFirebaseConfigured ? '설정됨' : '미설정'}'),
                 const SizedBox(height: 12),
                 const Text('버전: 1.0.0+1'),
               ],

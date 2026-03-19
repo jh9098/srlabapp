@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/push/push_notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../home/presentation/home_screen.dart';
 import '../my/presentation/my_screen.dart';
+import '../notifications/presentation/notifications_screen.dart';
 import '../shorts/presentation/shorts_screen.dart';
+import '../stock/presentation/stock_search_screen.dart';
 import '../theme/presentation/theme_screen.dart';
 import '../watchlist/presentation/watchlist_screen.dart';
-import '../stock/presentation/stock_search_screen.dart';
-import '../notifications/presentation/notifications_screen.dart';
 import 'app_scope.dart';
 
 class SrLabApp extends StatelessWidget {
@@ -39,6 +40,8 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _index = 0;
+  bool _didBootstrap = false;
+  PushNotificationBootstrapResult? _pushBootstrapResult;
 
   final _screens = const [
     HomeScreen(),
@@ -53,7 +56,19 @@ class _AppShellState extends State<AppShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    AppScope.of(context).watchlistController.load();
+    final scope = AppScope.of(context);
+    scope.watchlistController.load();
+    if (_didBootstrap) {
+      return;
+    }
+    _didBootstrap = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final result = await scope.pushNotificationService.bootstrap();
+      if (!mounted) {
+        return;
+      }
+      setState(() => _pushBootstrapResult = result);
+    });
   }
 
   @override
@@ -68,7 +83,17 @@ class _AppShellState extends State<AppShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: _index, children: _screens),
+      body: Column(
+        children: [
+          if (_pushBootstrapResult != null)
+            MaterialBanner(
+              content: Text(_pushBootstrapResult!.message),
+              backgroundColor: _pushBootstrapResult!.didRegisterToken ? Colors.green.shade50 : Colors.blueGrey.shade50,
+              actions: const [SizedBox.shrink()],
+            ),
+          Expanded(child: IndexedStack(index: _index, children: _screens)),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) => setState(() => _index = index),

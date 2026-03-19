@@ -1,3 +1,13 @@
+def admin_auth_headers(client):
+    login_response = client.post(
+        '/api/v1/admin/auth/login',
+        json={'username': 'admin', 'password': 'admin1234'},
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()['data']['access_token']
+    return {'Authorization': f'Bearer {token}'}
+
+
 def test_notifications_api_and_read_flow(client):
     response = client.get('/api/v1/notifications', headers={'X-User-Identifier': 'demo-user'})
     assert response.status_code == 200
@@ -33,14 +43,43 @@ def test_alert_settings_api(client):
     assert update.json()['data']['price_signal_enabled'] is False
 
 
+def test_device_token_register_api(client):
+    response = client.post(
+        '/api/v1/me/device-tokens',
+        headers={'X-User-Identifier': 'demo-user'},
+        json={
+            'device_token': 'new-fcm-token',
+            'platform': 'android',
+            'provider': 'fcm',
+            'device_label': 'pixel-test',
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()['data']['provider'] == 'fcm'
+
+
+def test_admin_login_and_session(client):
+    login_response = client.post(
+        '/api/v1/admin/auth/login',
+        json={'username': 'admin', 'password': 'admin1234'},
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()['data']['access_token']
+
+    me_response = client.get('/api/v1/admin/auth/me', headers={'Authorization': f'Bearer {token}'})
+    assert me_response.status_code == 200
+    assert me_response.json()['data']['admin_username'] == 'admin'
+
+
 def test_admin_force_update_and_manual_push_logs_audit(client):
-    state_response = client.get('/api/v1/admin/support-states')
+    headers = admin_auth_headers(client)
+    state_response = client.get('/api/v1/admin/support-states', headers=headers)
     assert state_response.status_code == 200
     state_id = state_response.json()['data'][0]['id']
 
     update_response = client.patch(
         f'/api/v1/admin/support-states/{state_id}/force',
-        headers={'X-Admin-Identifier': 'operator-1'},
+        headers=headers,
         json={'status': 'INVALID', 'memo': '수동 검수', 'status_reason': '운영자 수정'},
     )
     assert update_response.status_code == 200
@@ -48,7 +87,7 @@ def test_admin_force_update_and_manual_push_logs_audit(client):
 
     push_response = client.post(
         '/api/v1/admin/manual-push',
-        headers={'X-Admin-Identifier': 'operator-1'},
+        headers=headers,
         json={
             'user_identifier': 'demo-user',
             'title': '운영 공지',
@@ -59,7 +98,7 @@ def test_admin_force_update_and_manual_push_logs_audit(client):
     )
     assert push_response.status_code == 200
 
-    audit_response = client.get('/api/v1/admin/audit-logs')
+    audit_response = client.get('/api/v1/admin/audit-logs', headers=headers)
     assert audit_response.status_code == 200
     actions = [item['action'] for item in audit_response.json()['data']['items']]
     assert 'force_update_support_state' in actions
