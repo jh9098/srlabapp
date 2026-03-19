@@ -5,7 +5,6 @@ import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_state.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../app/app_scope.dart';
-import '../../shared/controllers/watchlist_controller.dart';
 import '../data/stock_models.dart';
 
 class StockDetailScreen extends StatefulWidget {

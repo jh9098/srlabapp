@@ -51,7 +51,7 @@ class StockCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (trailing != null) trailing!,
+                  if (trailing case final trailingWidget) trailingWidget,
                 ],
               ),
               const SizedBox(height: 12),
@@ -74,9 +74,9 @@ class StockCard extends StatelessWidget {
                   status,
                 ],
               ),
-              if (subtitle != null) ...[
+              if (subtitle case final subtitleWidget) ...[
                 const SizedBox(height: 12),
-                subtitle!,
+                subtitleWidget,
               ],
               const SizedBox(height: 12),
               Text(summary, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade800)),

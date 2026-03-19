@@ -36,7 +36,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _markAsRead(NotificationItemModel item) async {
-    await AppScope.of(context).notificationRepository.markAsRead(item.notificationId);
+    await AppScope.of(context).notificationRepository.markAsRead(
+      item.notificationId,
+    );
     await _refresh();
   }
 
@@ -47,12 +49,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: FutureBuilder<List<NotificationItemModel>>(
         future: _future,
         builder: (context, snapshot) {
-          if (_future == null || snapshot.connectionState != ConnectionState.done) {
+          if (_future == null ||
+              snapshot.connectionState != ConnectionState.done) {
             return const LoadingState(message: '알림을 불러오는 중입니다.');
           }
           if (snapshot.hasError) {
             return ErrorState(
-              message: '알림을 불러오지 못했습니다.\n${snapshot.error}',
+              message: '알림을 불러오지 못했습니다\n${snapshot.error}',
               onRetry: _refresh,
             );
           }
@@ -60,7 +63,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           if (items.isEmpty) {
             return const EmptyState(
               title: '도착한 알림이 없습니다',
-              message: '중요한 상태 변화가 생기면 이곳에 저장됩니다.',
+              description: '중요한 상태 변화가 생기면 이곳에 저장됩니다.',
               icon: Icons.notifications_none_rounded,
             );
           }
@@ -69,11 +72,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final item = items[index];
+                final unreadColor = Theme.of(context)
+                    .colorScheme
+                    .primaryContainer
+                    .withValues(alpha: 0.4);
                 return Card(
-                  color: item.isRead ? null : Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4),
+                  color: item.isRead ? null : unreadColor,
                   child: ListTile(
                     title: Text(item.title),
                     subtitle: Column(
