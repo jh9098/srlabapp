@@ -99,9 +99,19 @@ class SupportStateEngine:
         return self._result(previous_status, support_state, None)
 
     def _effective_config(self, price_level: PriceLevel) -> SupportStateEngineConfig:
+        support_near_pct = price_level.proximity_threshold_pct
+        rebound_success_pct = price_level.rebound_threshold_pct
         return SupportStateEngineConfig(
-            support_near_pct=Decimal(price_level.proximity_threshold_pct),
-            rebound_success_pct=Decimal(price_level.rebound_threshold_pct),
+            support_near_pct=(
+                Decimal(support_near_pct)
+                if support_near_pct is not None
+                else self.config.support_near_pct
+            ),
+            rebound_success_pct=(
+                Decimal(rebound_success_pct)
+                if rebound_success_pct is not None
+                else self.config.rebound_success_pct
+            ),
             support_retouch_pct=self.config.support_retouch_pct,
             support_break_basis=self.config.support_break_basis,
             reuse_high_basis=self.config.reuse_high_basis,

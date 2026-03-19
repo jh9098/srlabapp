@@ -2,9 +2,9 @@
 
 지지저항Lab MVP 저장소입니다.
 
-이번 단계에서는 **관리자 기능 + 알림함 + 푸시 기반 구조 + MVP 마무리 정리**를 반영했습니다.
+이번 단계에서는 **새 기능 추가보다 현재 구현본의 안정화/정합성 수정**에 집중했습니다.
 
-## 1. 저장소 구조
+## 1. 현재 실제 저장소 구조
 
 ```text
 /docs
@@ -13,48 +13,41 @@
 /lib
 /android
 /ios
+/macos
+/linux
+/windows
 /web
 /test
+/pubspec.yaml
 ```
 
 - `docs`: 제품/상태로직/API/운영 명세 문서
-- `backend_api`: FastAPI 백엔드와 관리자/알림/푸시 기반 API
-- `admin_web`: 운영 가능한 최소 정적 관리자 화면
+- `backend_api`: FastAPI 백엔드, 상태 엔진, 관리자/알림 API
+- `admin_web`: 운영 검수용 최소 정적 관리자 화면
 - `lib` 이하: 현재 Flutter 앱 본체
-- `test`: Flutter 테스트
+- `test`: Flutter 위젯 테스트
+- `pubspec.yaml`: 루트 Flutter 앱 패키지 정의 파일
 
-> 문서 권장 구조는 `frontend_app/` 이지만, 실제 Flutter 앱은 이전 단계 구현을 이어 받아 **저장소 루트**에 있습니다. 이 차이는 `TODO_MVP_GAPS.md`에 따로 정리했습니다.
+> 문서 권장 구조는 `frontend_app/` 이지만, 실제 Flutter 앱은 이전 단계 구현을 이어 받아 **저장소 루트**에 있습니다. 이 차이는 `TODO_MVP_GAPS.md`에 명시했습니다.
 
 ---
 
-## 2. 이번 단계에서 구현한 범위
+## 2. 이번 안정화 작업에서 정리한 범위
 
-### 2-1. 관리자 기능
-- 종목 관리 API/화면
-- 가격 레벨 관리 API/화면
-- 지지선 상태 조회 API/화면
-- 지지선 상태 강제 수정 API/화면
-- 신호 이벤트 조회 API/화면
-- 홈 노출 관리 API/화면
-- 테마 관리 API/화면
-- 운영 로그 조회 API/화면
-- 수동 푸시 저장 및 운영 로그 기록
+### 2-1. support state engine 안정화
+- `PriceLevel.proximity_threshold_pct` 또는 `rebound_threshold_pct` 가 `None`이어도 `Decimal(None)` 예외가 나지 않도록 수정했습니다.
+- 값이 비어 있으면 기본 엔진 설정값(`support_near_pct=1.50`, `rebound_success_pct=5.00`)으로 fallback 되도록 정리했습니다.
+- 메모리 객체(`PriceLevel(...)`) 기반 테스트도 통과하도록 보강했습니다.
 
-### 2-2. 알림/푸시 기능
-- `GET /api/v1/notifications`
-- `PATCH /api/v1/notifications/{notification_id}/read`
-- `GET /api/v1/me/alert-settings`
-- `PATCH /api/v1/me/alert-settings`
-- `POST /api/v1/me/device-tokens`
-- `signal_events -> notifications` 저장 연결
-- 디바이스 토큰 저장 테이블 추가
-- 실제 provider 교체 가능한 `PushProvider` / `StubPushProvider` 구조 추가
+### 2-2. 테스트/API 규약 정합성 수정
+- Home API 테스트 헤더를 실제 규약인 `X-User-Identifier` 로 수정했습니다.
+- `backend_api/tests` 가 외부 `httpx` 패키지 유무에 덜 민감하도록 경량 ASGI 테스트 클라이언트로 정리했습니다.
+- support state / home / signals / themes / notifications / admin / watchlist 테스트를 전체 기준으로 다시 확인했습니다.
 
-### 2-3. Flutter 화면
-- 알림함 화면
-- 알림 설정 화면
-- 상단 알림 아이콘에서 알림함 진입
-- 마이 페이지에서 알림함/알림 설정 진입
+### 2-3. 문서/패키징 상태 점검
+- 루트 `README.md`, `TODO_MVP_GAPS.md`, `pubspec.yaml`, `backend_api/.env.example` 실제 존재 여부를 확인했습니다.
+- 저장소 루트 Flutter 구조와 문서 권장 구조(`frontend_app/`) 차이를 README/TODO에 명시했습니다.
+- zip 산출물 기준으로 실행에 필요한 핵심 파일이 누락되지 않았는지 재점검했습니다.
 
 ---
 
@@ -64,7 +57,7 @@
 cd backend_api
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e .[test]
 cp .env.example .env
 alembic upgrade head
 python scripts/seed_minimum_data.py
@@ -75,11 +68,19 @@ uvicorn app.main:app --reload
 - API: `http://127.0.0.1:8000/api/v1`
 - Swagger: `http://127.0.0.1:8000/docs`
 
-### 테스트
+### backend_api 테스트 방법
+
+`backend_api` 폴더 안에서 실행:
 
 ```bash
 cd backend_api
-pytest
+pytest tests -q
+```
+
+저장소 루트에서 바로 실행:
+
+```bash
+pytest backend_api/tests -q
 ```
 
 ---
@@ -112,6 +113,12 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1 --dart-define
 flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 --dart-define=USER_IDENTIFIER=demo-user
 ```
 
+### Flutter 테스트
+
+```bash
+flutter test
+```
+
 ---
 
 ## 5. admin_web 실행 방법
@@ -129,7 +136,47 @@ python3 -m http.server 4173
 
 ---
 
-## 6. 환경변수 예시
+## 6. 실제 검수 순서 권장
+
+가장 빠른 로컬 검수 순서는 아래와 같습니다.
+
+1. `backend_api` 의존성 설치
+2. DB 마이그레이션 적용
+3. 최소 seed 데이터 적재
+4. 백엔드 테스트 실행
+5. 백엔드 서버 실행
+6. Flutter 앱 실행
+7. 별도 터미널에서 `admin_web` 정적 서버 실행
+
+예시:
+
+```bash
+cd backend_api
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .[test]
+cp .env.example .env
+alembic upgrade head
+python scripts/seed_minimum_data.py
+pytest tests -q
+uvicorn app.main:app --reload
+```
+
+다른 터미널 예시:
+
+```bash
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 --dart-define=USER_IDENTIFIER=demo-user
+```
+
+```bash
+cd admin_web
+python3 -m http.server 4173
+```
+
+---
+
+## 7. 환경변수 예시
 
 ### backend_api/.env.example
 
@@ -150,7 +197,7 @@ DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/srlab
 
 ---
 
-## 7. 비전공자 기준으로 쉽게 설명한 구조
+## 8. 비전공자 기준으로 쉽게 설명한 구조
 
 ### 백엔드 알림 구조
 1. `signal_event`가 생기면
@@ -166,7 +213,7 @@ DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/srlab
 
 ---
 
-## 8. 문서와 코드가 아직 완전히 맞지 않는 부분
+## 9. 현재 남아있는 미완성/주의 항목
 
 아래는 숨기지 않고 명확하게 남깁니다.
 
@@ -174,12 +221,13 @@ DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/srlab
 2. 실제 FCM 연동은 아직 하지 않았고, 현재는 교체 가능한 골격만 구현했습니다.
 3. 관리자 인증은 정식 로그인 방식이 아니라 헤더 기반 최소 운영 형태입니다.
 4. 관리자 UI는 고급 디자인보다 운영 기능 우선의 정적 관리자입니다.
+5. 프로덕션 배포 전에는 실제 푸시 provider 연결, 관리자 인증/권한, HTTPS/CORS/배포 설정, 에러 모니터링이 추가로 필요합니다.
 
 자세한 목록은 `TODO_MVP_GAPS.md`를 참고하세요.
 
 ---
 
-## 9. Cloud Firestore 읽기 비용 검토
+## 10. Cloud Firestore 읽기 비용 검토
 
 이 저장소의 이번 구현은 **Cloud Firestore를 사용하지 않습니다.**
 따라서 이번 변경으로 인해 **Firestore document read 비용 증가는 0건**입니다.
