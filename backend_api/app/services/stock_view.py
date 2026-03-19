@@ -2,25 +2,39 @@ from collections.abc import Iterable
 from decimal import Decimal, ROUND_HALF_UP
 
 from app.core.errors import AppError
+from app.models.content_post import ContentPost
 from app.models.daily_bar import DailyBar
-from app.models.enums import PriceLevelType, SupportStatus
+from app.models.enums import PriceLevelType, SignalType, SupportStatus, ThemeRoleType
 from app.models.price_level import PriceLevel
 from app.models.stock import Stock
 from app.models.support_state import SupportState
-from app.models.watchlist import Watchlist
 from app.repositories.stocks import StockRepository
 from app.repositories.watchlists import WatchlistRepository
 from app.schemas.stocks import (
+    ContentReference,
+    DailyBarItem,
+    HomeFeaturedStockItem,
+    HomeMarketSummary,
+    HomeResponseData,
     PriceSnapshot,
+    RecentContentItem,
     ScenarioSummary,
+    SignalEventItem,
     StatusBadge,
+    StockChartSummary,
     StockDetailResponseData,
     StockLevelItem,
     StockSearchItem,
     StockSearchResponseData,
+    StockSignalsResponseData,
     StockSummary,
     StockWatchlistSummary,
     SupportStateSummary,
+    ThemeItem,
+    ThemeReference,
+    ThemeStockSummary,
+    ThemesResponseData,
+    WatchlistSignalSummary,
 )
 
 PCT_QUANT = Decimal("0.01")
@@ -32,6 +46,15 @@ STATUS_META = {
     SupportStatus.BREAK_REBOUND_SUCCESS: ("이탈 후 복원 성공", "positive"),
     SupportStatus.REUSABLE: ("재사용 가능", "neutral"),
     SupportStatus.INVALID: ("재사용 금지", "warning"),
+}
+
+SIGNAL_LABELS = {
+    SignalType.SUPPORT_NEAR: "지지선 접근",
+    SignalType.SUPPORT_TESTING: "지지선 반응 확인 중",
+    SignalType.SUPPORT_DIRECT_REBOUND_SUCCESS: "지지선 반등 성공",
+    SignalType.SUPPORT_BREAK_REBOUND_SUCCESS: "지지선 이탈 후 복원",
+    SignalType.SUPPORT_REUSABLE: "지지선 재활용 가능",
+    SignalType.SUPPORT_INVALIDATED: "지지선 무효화",
 }
 
 SCENARIO_TEXT = {
@@ -127,23 +150,16 @@ class StockViewService:
         )
 
     def get_stock_detail(self, stock_code: str, user_identifier: str | None = None) -> StockDetailResponseData:
-        stock = self.stock_repository.get_by_code(stock_code)
-        if not stock:
-            raise AppError(message="종목을 찾을 수 없습니다.", error_code="STOCK_NOT_FOUND", status_code=404)
-
+        stock = self._get_stock_or_raise(stock_code)
         latest_bar = self._get_latest_bar(stock)
         primary_state = self._select_primary_support_state(stock.support_states)
         status = self._build_status_badge(primary_state.status)
         levels = self._build_levels(stock.price_levels, latest_bar.close_price)
         watchlist = self._build_watchlist_summary(stock, user_identifier)
-
         scenario_base, scenario_bull, scenario_bear = SCENARIO_TEXT[primary_state.status]
+
         return StockDetailResponseData(
-            stock=StockSummary(
-                stock_code=stock.code,
-                stock_name=stock.name,
-                market_type=stock.market_type.value,
-            ),
+            stock=StockSummary(stock_code=stock.code, stock_name=stock.name, market_type=stock.market_type.value),
             price=PriceSnapshot(
                 current_price=latest_bar.close_price,
                 change_value=latest_bar.change_value,
@@ -158,13 +174,75 @@ class StockViewService:
             support_state=SupportStateSummary(
                 status=primary_state.status.value,
                 reaction_type=self._reaction_type(primary_state.status),
-                first_touched_at=primary_state.last_evaluated_at,
+                first_touched_at=primary_state.first_touched_at or primary_state.last_evaluated_at,
                 rebound_pct=self._calculate_rebound_pct(primary_state),
             ),
             scenario=ScenarioSummary(base=scenario_base, bull=scenario_bull, bear=scenario_bear),
             reason_lines=REASON_LINES[primary_state.status],
+            chart=StockChartSummary(
+                daily_bars=[
+                    DailyBarItem(
+                        trade_date=bar.trade_date,
+                        open_price=bar.open_price,
+                        high_price=bar.high_price,
+                        low_price=bar.low_price,
+                        close_price=bar.close_price,
+                        volume=bar.volume,
+                    )
+                    for bar in sorted(stock.daily_bars, key=lambda item: item.trade_date, reverse=True)[:20]
+                ]
+            ),
+            related_themes=self._build_related_themes(stock),
+            related_contents=self._build_related_contents(stock.content_posts),
             watchlist=watchlist,
         )
+
+    def get_stock_signals(self, stock_code: str, limit: int = 20) -> StockSignalsResponseData:
+        stock = self._get_stock_or_raise(stock_code)
+        items = self.stock_repository.list_signal_events(stock.id, limit=limit)
+        return StockSignalsResponseData(
+            items=[
+                SignalEventItem(
+                    event_id=item.id,
+                    signal_type=item.signal_type.value,
+                    label=SIGNAL_LABELS.get(item.signal_type, item.signal_type.value),
+                    message=item.message,
+                    event_time=item.event_time,
+                )
+                for item in items
+            ]
+        )
+
+    def get_home(self, user_identifier: str | None = None) -> HomeResponseData:
+        featured_stocks = self.stock_repository.list_featured_stocks(limit=5)
+        theme_items = self._build_theme_items(self.stock_repository.list_themes(limit=3))
+        recent_contents = self.stock_repository.list_recent_contents(limit=4)
+        summary = self.stock_repository.count_watchlist_signal_summary(user_identifier)
+        return HomeResponseData(
+            market_summary=HomeMarketSummary(headline=self._build_market_headline(featured_stocks)),
+            featured_stocks=[self._build_home_featured_stock(stock) for stock in featured_stocks],
+            watchlist_signal_summary=WatchlistSignalSummary(**summary),
+            themes=theme_items,
+            recent_contents=[
+                RecentContentItem(
+                    content_id=item.id,
+                    category=item.category.value,
+                    title=item.title,
+                    summary=item.summary,
+                    external_url=item.external_url,
+                )
+                for item in recent_contents
+            ],
+        )
+
+    def get_themes(self) -> ThemesResponseData:
+        return ThemesResponseData(items=self._build_theme_items(self.stock_repository.list_themes(limit=20)))
+
+    def _get_stock_or_raise(self, stock_code: str) -> Stock:
+        stock = self.stock_repository.get_by_code(stock_code)
+        if not stock:
+            raise AppError(message="종목을 찾을 수 없습니다.", error_code="STOCK_NOT_FOUND", status_code=404)
+        return stock
 
     def _get_latest_bar(self, stock: Stock) -> DailyBar:
         if not stock.daily_bars:
@@ -220,19 +298,92 @@ class StockViewService:
     def _build_watchlist_summary(self, stock: Stock, user_identifier: str | None) -> StockWatchlistSummary:
         if not user_identifier:
             return StockWatchlistSummary(is_in_watchlist=False, alert_enabled=False, watchlist_id=None)
-
         watchlist = next(
             (item for item in stock.watchlists if item.user_identifier == user_identifier and item.is_active),
             None,
         )
         if not watchlist:
             return StockWatchlistSummary(is_in_watchlist=False, alert_enabled=False, watchlist_id=None)
-
         return StockWatchlistSummary(
             is_in_watchlist=True,
             alert_enabled=watchlist.notification_enabled,
             watchlist_id=watchlist.id,
         )
+
+    def _build_related_themes(self, stock: Stock) -> list[ThemeReference]:
+        references = []
+        for item in stock.theme_maps:
+            if item.theme and item.theme.is_active:
+                references.append(ThemeReference(theme_id=item.theme.id, name=item.theme.name))
+        return references
+
+    def _build_related_contents(self, content_posts: Iterable[ContentPost]) -> list[ContentReference]:
+        return [
+            ContentReference(
+                content_id=item.id,
+                category=item.category.value,
+                title=item.title,
+                summary=item.summary,
+                external_url=item.external_url,
+            )
+            for item in sorted(content_posts, key=lambda entry: (entry.published_at is None, entry.published_at), reverse=True)[:5]
+        ]
+
+    def _build_market_headline(self, featured_stocks: list[Stock]) -> str:
+        if not featured_stocks:
+            return "오늘의 관찰 종목 데이터가 아직 준비되지 않았습니다."
+        positive = 0
+        negative = 0
+        sectors: list[str] = []
+        for stock in featured_stocks:
+            latest_bar = self._get_latest_bar(stock)
+            if latest_bar.change_pct >= 0:
+                positive += 1
+            else:
+                negative += 1
+            if stock.sector and stock.sector not in sectors:
+                sectors.append(stock.sector)
+        mood = "반등 시도" if positive >= negative else "변동성 경계"
+        sector_text = sectors[0] if sectors else "주요 종목"
+        return f"{mood}, {sector_text} 중심 관찰이 필요한 장세"
+
+    def _build_home_featured_stock(self, stock: Stock) -> HomeFeaturedStockItem:
+        latest_bar = self._get_latest_bar(stock)
+        primary_state = self._select_primary_support_state(stock.support_states)
+        return HomeFeaturedStockItem(
+            stock_code=stock.code,
+            stock_name=stock.name,
+            current_price=latest_bar.close_price,
+            change_pct=latest_bar.change_pct,
+            status=self._build_status_badge(primary_state.status),
+            summary=primary_state.status_reason or SCENARIO_TEXT[primary_state.status][0],
+        )
+
+    def _build_theme_items(self, themes) -> list[ThemeItem]:
+        items: list[ThemeItem] = []
+        for theme in themes:
+            leader = None
+            followers: list[ThemeStockSummary] = []
+            for stock_map in sorted(
+                theme.stock_maps,
+                key=lambda item: (0 if item.role_type == ThemeRoleType.LEADER else 1, -(item.score or 0)),
+            ):
+                stock_summary = ThemeStockSummary(stock_code=stock_map.stock.code, stock_name=stock_map.stock.name)
+                if stock_map.role_type == ThemeRoleType.LEADER and leader is None:
+                    leader = stock_summary
+                else:
+                    followers.append(stock_summary)
+            items.append(
+                ThemeItem(
+                    theme_id=theme.id,
+                    name=theme.name,
+                    score=theme.score,
+                    summary=theme.summary,
+                    leader_stock=leader,
+                    follower_stocks=followers[:5],
+                )
+            )
+        return items
 
     def _calculate_distance_pct(self, current_price: Decimal, level_price: Decimal) -> Decimal | None:
         if level_price == 0:
@@ -242,7 +393,7 @@ class StockViewService:
 
     def _calculate_rebound_pct(self, support_state: SupportState) -> Decimal | None:
         if support_state.reference_price in (None, 0) or support_state.last_price is None:
-            return None
+            return support_state.rebound_pct
         rebound = ((support_state.last_price - support_state.reference_price) / support_state.reference_price) * Decimal("100")
         return rebound.quantize(PCT_QUANT, rounding=ROUND_HALF_UP)
 

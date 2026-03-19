@@ -13,7 +13,17 @@ os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models import DailyBar, PriceLevel, Stock, SupportState, Watchlist  # noqa: F401
+from app.models import (
+    ContentPost,
+    DailyBar,
+    PriceLevel,
+    SignalEvent,
+    Stock,
+    SupportState,
+    Theme,
+    ThemeStockMap,
+    Watchlist,
+)  # noqa: F401
 from app.services.seed import seed_minimum_data
 
 
