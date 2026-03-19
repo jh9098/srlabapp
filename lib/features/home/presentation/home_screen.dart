@@ -159,7 +159,7 @@ class _SectionHeader extends StatelessWidget {
             ],
           ),
         ),
-        if (action != null) action!,
+        if (action case final actionWidget) actionWidget,
       ],
     );
   }
