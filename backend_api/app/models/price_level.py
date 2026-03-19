@@ -24,3 +24,4 @@ class PriceLevel(TimestampMixin, ActiveMixin, Base):
 
     stock = relationship("Stock", back_populates="price_levels")
     support_states = relationship("SupportState", back_populates="price_level", cascade="all, delete-orphan")
+    signal_events = relationship("SignalEvent", back_populates="price_level")

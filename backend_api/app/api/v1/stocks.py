@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.repositories.stocks import StockRepository
 from app.repositories.watchlists import WatchlistRepository
 from app.schemas.common import ApiResponse
-from app.schemas.stocks import StockDetailResponseData, StockSearchResponseData
+from app.schemas.stocks import StockDetailResponseData, StockSearchResponseData, StockSignalsResponseData
 from app.services.stock_view import StockViewService
 
 router = APIRouter(prefix="/stocks", tags=["stocks"])
@@ -31,3 +31,14 @@ def get_stock_detail(
     service = StockViewService(StockRepository(db), WatchlistRepository(db))
     data = service.get_stock_detail(stock_code, user_identifier)
     return ApiResponse(message="종목 상세 데이터입니다.", data=data)
+
+
+@router.get("/{stock_code}/signals", response_model=ApiResponse[StockSignalsResponseData])
+def get_stock_signals(
+    stock_code: str,
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> ApiResponse[StockSignalsResponseData]:
+    service = StockViewService(StockRepository(db), WatchlistRepository(db))
+    data = service.get_stock_signals(stock_code, limit=limit)
+    return ApiResponse(message="종목 신호 이벤트 목록입니다.", data=data)

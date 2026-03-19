@@ -23,3 +23,6 @@ class Stock(TimestampMixin, ActiveMixin, Base):
     support_states = relationship("SupportState", back_populates="stock", cascade="all, delete-orphan")
     watchlists = relationship("Watchlist", back_populates="stock", cascade="all, delete-orphan")
     daily_bars = relationship("DailyBar", back_populates="stock", cascade="all, delete-orphan")
+    signal_events = relationship("SignalEvent", back_populates="stock", cascade="all, delete-orphan")
+    theme_maps = relationship("ThemeStockMap", back_populates="stock", cascade="all, delete-orphan")
+    content_posts = relationship("ContentPost", back_populates="stock")
