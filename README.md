@@ -2,19 +2,7 @@
 
 지지저항Lab MVP 저장소입니다.
 
-현재 저장소에는 기존 Flutter 앱 프로젝트와 함께, MVP 1단계 범위에 맞춘 `backend_api` FastAPI 초기 구조가 추가되어 있습니다.
-
-## 이번 단계에서 추가된 백엔드 범위
-
-- FastAPI 프로젝트 기본 구조 생성
-- SQLAlchemy/Alembic 설정 추가
-- 핵심 MVP 테이블 모델 추가
-  - `stocks`
-  - `price_levels`
-  - `support_states`
-  - `watchlists`
-- 초기 Alembic 마이그레이션 추가
-- 로컬 실행 가이드 추가
+이번 단계에서는 **기존 backend_api를 기준으로 Flutter MVP 핵심 화면과 API 연동**을 추가했습니다.
 
 ## 저장소 구조
 
@@ -22,115 +10,159 @@
 /docs
 /backend_api
 /lib
-/android
-/ios
-...
+/test
 ```
 
-- `docs`: 제품/로직/DB/API 명세 문서
-- `backend_api`: FastAPI + SQLAlchemy + Alembic 백엔드
-- 나머지 Flutter 관련 디렉터리는 기존 앱 프로젝트 자산입니다.
+- `docs`: 제품/화면/API/운영 명세 문서
+- `backend_api`: FastAPI 백엔드
+- `lib`: Flutter 앱 본체
+- `test`: Flutter 테스트
 
-## backend_api 로컬 실행 방법
+---
 
-### 1) Python 가상환경 생성
+## 이번 작업에서 구현한 Flutter MVP 범위
+
+### 화면
+- 홈
+- 관심종목
+- 종목 검색
+- 종목 상세
+- 테마
+- 쇼츠(외부 콘텐츠 링크 최소 버전)
+- 마이(최소 버전)
+
+### 하단 탭
+- 홈
+- 관심종목
+- 테마
+- 쇼츠
+- 마이
+
+### 공통 UI 컴포넌트
+- stock card
+- status badge
+- loading state
+- empty state
+- error state
+
+### API 연동
+- `GET /api/v1/home`
+- `GET /api/v1/stocks/search`
+- `GET /api/v1/stocks/{stock_code}`
+- `GET /api/v1/watchlist`
+- `POST /api/v1/watchlist`
+- `DELETE /api/v1/watchlist/{watchlist_id}`
+- `PATCH /api/v1/watchlist/{watchlist_id}/alert`
+- `GET /api/v1/themes`
+
+---
+
+## 앱 실행 방법
+
+## 1) backend_api 실행
 
 ```bash
 cd backend_api
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-### 2) 의존성 설치
-
-```bash
 pip install -e .
-```
-
-### 3) 환경변수 파일 준비
-
-```bash
 cp .env.example .env
-```
-
-기본 `DATABASE_URL`은 PostgreSQL 예시입니다.
-
-```env
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/srlab
-```
-
-### 4) PostgreSQL 준비
-
-로컬 PostgreSQL에 `srlab` 데이터베이스를 생성합니다.
-
-예시:
-
-```bash
-createdb srlab
-```
-
-### 5) 마이그레이션 적용
-
-```bash
 alembic upgrade head
-```
-
-### 6) 개발 서버 실행
-
-```bash
 uvicorn app.main:app --reload
 ```
 
-실행 후 확인 주소:
+기본 주소 예시:
 
-- 앱 루트: `http://127.0.0.1:8000/`
-- 헬스체크: `http://127.0.0.1:8000/api/v1/health`
+- API: `http://127.0.0.1:8000/api/v1`
 - Swagger: `http://127.0.0.1:8000/docs`
 
-## backend_api 구조 설명
+## 2) Flutter 의존성 설치
 
-```text
-backend_api/
-  app/
-    api/
-      v1/
-    core/
-    db/
-    models/
-    schemas/
-    repositories/
-    services/
-    tasks/
-    utils/
-  alembic/
+저장소 루트에서:
+
+```bash
+flutter pub get
 ```
 
-### 왜 이렇게 나눴나요?
+## 3) Flutter 앱 실행
 
-비전공자 관점에서 쉽게 설명하면 아래와 같습니다.
+에뮬레이터/시뮬레이터 또는 웹에서 다음처럼 실행합니다.
 
-- `api/`: 외부에서 호출하는 URL 입구
-- `core/`: 설정값 같은 공통 환경
-- `db/`: DB 연결, Base 정의
-- `models/`: 실제 테이블 구조
-- `schemas/`: API 응답/요청 형식
-- `repositories/`: DB 조회 로직을 모아둘 자리
-- `services/`: 핵심 비즈니스 로직을 모아둘 자리
-- `tasks/`: 배치/비동기 작업을 모아둘 자리
-- `utils/`: 공용 유틸 함수 자리
+### 모바일/데스크톱 기본 예시
 
-## 현재 구현 상태 메모
+```bash
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 --dart-define=USER_IDENTIFIER=demo-user
+```
 
-이번 작업은 **백엔드 초기 구조 생성 단계까지만** 포함합니다.
-아직 아래는 구현하지 않았습니다.
+### Android 에뮬레이터 예시
 
-- 종목 검색 API
-- 종목 상세 API
-- 관심종목 CRUD API
-- 지지선 상태 계산 서비스
-- 알림/푸시 기능
-- 관리자 웹 기능
+Android 에뮬레이터에서는 호스트 머신의 localhost 대신 `10.0.2.2`를 사용해야 할 수 있습니다.
 
-## Flutter
+```bash
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1 --dart-define=USER_IDENTIFIER=demo-user
+```
 
-Flutter 앱 코드는 이번 작업 범위에 포함하지 않아 수정하지 않았습니다.
+### Chrome 실행 예시
+
+```bash
+flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 --dart-define=USER_IDENTIFIER=demo-user
+```
+
+---
+
+## 비전공자 기준으로 쉽게 설명한 앱 구조
+
+### `lib/core`
+앱 전체에서 같이 쓰는 공용 부품입니다.
+
+- `config`: API 주소, 사용자 식별자 같은 앱 설정
+- `network`: HTTP 통신과 에러 처리
+- `theme`: 앱 색상/기본 테마
+- `widgets`: 공통 UI 컴포넌트
+- `utils`: 숫자 포맷 같은 작은 도우미
+
+### `lib/features`
+실제 기능별로 폴더를 나눈 구조입니다.
+
+- `home`: 홈 화면 관련 코드
+- `watchlist`: 관심종목 관련 코드
+- `stock`: 종목 검색/상세 관련 코드
+- `theme`: 테마 관련 코드
+- `shorts`: 쇼츠 탭 최소 버전
+- `my`: 마이 탭 최소 버전
+- `shared`: 여러 화면에서 같이 쓰는 모델/컨트롤러
+- `app`: 앱 진입점, 하단 탭, 전역 의존성
+
+이렇게 나누면 파일이 너무 길어질 때 기능별로 분리해서 유지보수하기 쉬워집니다.
+
+---
+
+## 현재 동작하는 핵심 사용자 흐름
+
+1. 홈에서 오늘의 관찰 종목과 테마를 확인
+2. 관심종목 탭에서 내 종목 상태를 요약 확인
+3. 종목 검색에서 종목명/코드로 검색
+4. 검색 결과에서 관심종목 추가/삭제
+5. 종목 상세에서 가격, 상태 배지, 지지선/저항선, 시나리오, 해설 3줄 확인
+6. 관심종목 알림 토글 ON/OFF 변경
+
+---
+
+## 이번 단계에서 아직 미완성인 부분
+
+- 알림함 화면
+- FCM 푸시 수신
+- 내부 영상 플레이어
+- 고급 차트 UI
+- 최근 본 종목 저장
+- 마이 페이지의 상세 설정 화면
+- 쇼츠 전용 API 기반 목록
+
+---
+
+## 참고 메모
+
+- 현재 관심종목 API는 `X-User-Identifier` 헤더가 필요합니다.
+- Flutter 앱은 `USER_IDENTIFIER` 값을 헤더로 보내도록 구현되어 있습니다.
+- MVP 목적에 맞춰 UI는 화려함보다 **빠른 상태 확인**에 집중했습니다.
+- Cloud Firestore는 이 저장소에서 사용하지 않았습니다. 따라서 이번 작업으로 인한 Firestore 읽기 비용 증가는 없습니다.
