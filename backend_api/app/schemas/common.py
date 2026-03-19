@@ -10,3 +10,8 @@ class ApiResponse(BaseModel, Generic[T]):
     message: str = "ok"
     data: T | None = None
     error_code: str | None = None
+
+
+class ErrorResponse(ApiResponse[None]):
+    success: bool = False
+    data: None = None
