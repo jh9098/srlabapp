@@ -1,5 +1,5 @@
 def test_get_home_api(client) -> None:
-    response = client.get("/api/v1/home", headers={"X-User-Id": "demo-user"})
+    response = client.get("/api/v1/home", headers={"X-User-Identifier": "demo-user"})
 
     assert response.status_code == 200
     payload = response.json()

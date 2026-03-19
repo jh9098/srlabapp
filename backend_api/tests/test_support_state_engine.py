@@ -29,7 +29,7 @@ def make_bar(close_price: str, low_price: str, high_price: str, day: int) -> Dai
 
 
 def make_state(status: SupportStatus = SupportStatus.WAITING) -> SupportState:
-    return SupportState(stock_id=1, price_level_id=1, status=status)
+    return SupportState(stock_id=1, price_level_id=1, status=status, breakdown_occurred=False)
 
 
 
@@ -59,7 +59,7 @@ def test_break_rebound_success_transition() -> None:
     level = make_level()
 
     engine.evaluate(state, level, make_bar("10020", "9990", "10060", 19), Decimal("10800"))
-    result = engine.evaluate(state, level, make_bar("10010", "9650", "10020", 20), Decimal("10800"))
+    result = engine.evaluate(state, level, make_bar("9990", "9650", "10020", 20), Decimal("10800"))
 
     assert result.current_status == SupportStatus.BREAK_REBOUND_SUCCESS
     assert result.signal_type == SignalType.SUPPORT_BREAK_REBOUND_SUCCESS
@@ -134,3 +134,22 @@ def test_signal_event_created_once_per_state_transition(db_session) -> None:
     assert event_two is not None
     assert event_one.id == event_two.id
     assert len(stock.signal_events) == 1
+
+
+def test_engine_uses_default_config_when_price_level_thresholds_are_missing() -> None:
+    engine = SupportStateEngine()
+    state = make_state()
+    level = PriceLevel(
+        stock_id=1,
+        level_type=PriceLevelType.SUPPORT,
+        price=Decimal("10000"),
+        proximity_threshold_pct=None,
+        rebound_threshold_pct=None,
+    )
+
+    first = engine.evaluate(state, level, make_bar("10100", "10100", "10150", 19), Decimal("11200"))
+    second = engine.evaluate(state, level, make_bar("10610", "10200", "10610", 20), Decimal("11200"))
+
+    assert first.current_status == SupportStatus.TESTING_SUPPORT
+    assert second.current_status == SupportStatus.DIRECT_REBOUND_SUCCESS
+    assert second.signal_type == SignalType.SUPPORT_DIRECT_REBOUND_SUCCESS
