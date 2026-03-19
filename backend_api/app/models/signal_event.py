@@ -34,3 +34,4 @@ class SignalEvent(TimestampMixin, Base):
     stock = relationship("Stock", back_populates="signal_events")
     price_level = relationship("PriceLevel", back_populates="signal_events")
     support_state = relationship("SupportState", back_populates="signal_events")
+    notifications = relationship("Notification", back_populates="signal_event")

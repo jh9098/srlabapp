@@ -35,6 +35,14 @@ class SignalType(str, Enum):
     RESISTANCE_REJECTED = "RESISTANCE_REJECTED"
 
 
+
+
+class NotificationType(str, Enum):
+    PRICE_SIGNAL = "PRICE_SIGNAL"
+    THEME_SIGNAL = "THEME_SIGNAL"
+    CONTENT_UPDATE = "CONTENT_UPDATE"
+    ADMIN_NOTICE = "ADMIN_NOTICE"
+
 class ThemeRoleType(str, Enum):
     LEADER = "LEADER"
     FOLLOWER = "FOLLOWER"

@@ -14,7 +14,12 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models import (
+    AdminAuditLog,
+    AlertSetting,
     ContentPost,
+    DeviceToken,
+    HomeFeaturedStock,
+    Notification,
     DailyBar,
     PriceLevel,
     SignalEvent,

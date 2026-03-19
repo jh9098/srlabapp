@@ -8,6 +8,7 @@ import '../shorts/presentation/shorts_screen.dart';
 import '../theme/presentation/theme_screen.dart';
 import '../watchlist/presentation/watchlist_screen.dart';
 import '../stock/presentation/stock_search_screen.dart';
+import '../notifications/presentation/notifications_screen.dart';
 import 'app_scope.dart';
 
 class SrLabApp extends StatelessWidget {
@@ -58,7 +59,15 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_titles[_index])),
+      appBar: AppBar(
+        title: Text(_titles[_index]),
+        actions: [
+          IconButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+            icon: const Icon(Icons.notifications_outlined),
+          ),
+        ],
+      ),
       body: IndexedStack(index: _index, children: _screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,

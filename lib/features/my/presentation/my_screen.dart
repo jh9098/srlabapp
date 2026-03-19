@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_scope.dart';
+import '../../notifications/presentation/notifications_screen.dart';
+import 'alert_settings_screen.dart';
 
 class MyScreen extends StatelessWidget {
   const MyScreen({super.key});
@@ -25,19 +27,27 @@ class MyScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        const Card(
+        Card(
           child: Column(
             children: [
               ListTile(
-                leading: Icon(Icons.notifications_active_outlined),
-                title: Text('알림 설정'),
-                subtitle: Text('현재는 관심종목별 알림 토글을 사용합니다.'),
+                leading: const Icon(Icons.notifications_active_outlined),
+                title: const Text('알림 설정'),
+                subtitle: const Text('가격 신호/테마/운영 공지 알림 범위를 설정합니다.'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AlertSettingsScreen())),
               ),
-              Divider(height: 1),
+              const Divider(height: 1),
               ListTile(
-                leading: Icon(Icons.contact_support_outlined),
-                title: Text('문의 / 공지'),
-                subtitle: Text('운영 공지는 추후 연결 예정입니다.'),
+                leading: const Icon(Icons.notifications_none_rounded),
+                title: const Text('알림함'),
+                subtitle: const Text('신호 이벤트와 운영 공지 이력을 확인합니다.'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.contact_support_outlined),
+                title: const Text('문의 / 공지'),
+                subtitle: const Text('운영 공지는 추후 연결 예정입니다.'),
               ),
             ],
           ),

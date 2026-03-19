@@ -4,9 +4,13 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.alert_setting import AlertSetting
 from app.models.content_post import ContentPost
 from app.models.daily_bar import DailyBar
-from app.models.enums import ContentCategory, MarketType, PriceLevelType, SignalType, SupportStatus, ThemeRoleType
+from app.models.device_token import DeviceToken
+from app.models.home_featured_stock import HomeFeaturedStock
+from app.models.notification import Notification
+from app.models.enums import ContentCategory, MarketType, NotificationType, PriceLevelType, SignalType, SupportStatus, ThemeRoleType
 from app.models.price_level import PriceLevel
 from app.models.signal_event import SignalEvent
 from app.models.stock import Stock
@@ -132,8 +136,7 @@ def seed_minimum_data(db: Session) -> None:
     db.add(content)
     db.flush()
 
-    db.add(
-        SignalEvent(
+    seed_signal_event = SignalEvent(
             stock_id=samsung.id,
             price_level_id=samsung_support.id,
             support_state_id=samsung_state.id,
@@ -146,7 +149,7 @@ def seed_minimum_data(db: Session) -> None:
             trigger_price=Decimal("66100"),
             event_time=evaluated_at,
         )
-    )
+    db.add(seed_signal_event)
 
     db.add(
         Watchlist(
@@ -154,6 +157,25 @@ def seed_minimum_data(db: Session) -> None:
             stock_id=samsung.id,
             notification_enabled=True,
             memo="seed watchlist",
+        )
+    )
+    db.flush()
+    db.add_all([
+        AlertSetting(user_identifier="demo-user"),
+        DeviceToken(user_identifier="demo-user", device_token="demo-token", platform="android", provider="stub", device_label="seed device"),
+        HomeFeaturedStock(stock_id=samsung.id, display_order=1),
+        HomeFeaturedStock(stock_id=sk.id, display_order=2),
+    ])
+    db.flush()
+    db.add(
+        Notification(
+            user_identifier="demo-user",
+            stock_id=samsung.id,
+            signal_event_id=seed_signal_event.id,
+            notification_type=NotificationType.PRICE_SIGNAL,
+            title="삼성전자 지지선 접근",
+            message="삼성전자가 지지선 65200원 부근에 진입했습니다.",
+            target_path="/stocks/005930",
         )
     )
     db.commit()
