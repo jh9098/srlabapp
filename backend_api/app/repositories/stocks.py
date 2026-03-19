@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.content_post import ContentPost
 from app.models.daily_bar import DailyBar
+from app.models.home_featured_stock import HomeFeaturedStock
 from app.models.price_level import PriceLevel
 from app.models.enums import SupportStatus
 from app.models.signal_event import SignalEvent
@@ -69,6 +70,17 @@ class StockRepository:
         return list(self.db.scalars(stmt))
 
     def list_featured_stocks(self, limit: int = 5) -> list[Stock]:
+        featured_stmt = (
+            select(Stock)
+            .join(HomeFeaturedStock, HomeFeaturedStock.stock_id == Stock.id)
+            .options(joinedload(Stock.daily_bars), joinedload(Stock.support_states))
+            .where(Stock.is_active.is_(True), HomeFeaturedStock.is_active.is_(True))
+            .order_by(HomeFeaturedStock.display_order.asc(), Stock.id.asc())
+            .limit(limit)
+        )
+        featured = list(self.db.execute(featured_stmt).unique().scalars())
+        if featured:
+            return featured
         subquery = (
             select(SupportState.stock_id, func.max(SupportState.last_evaluated_at).label("last_eval"))
             .group_by(SupportState.stock_id)

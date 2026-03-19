@@ -26,3 +26,5 @@ class Stock(TimestampMixin, ActiveMixin, Base):
     signal_events = relationship("SignalEvent", back_populates="stock", cascade="all, delete-orphan")
     theme_maps = relationship("ThemeStockMap", back_populates="stock", cascade="all, delete-orphan")
     content_posts = relationship("ContentPost", back_populates="stock")
+    notifications = relationship("Notification", back_populates="stock")
+    home_featured_entries = relationship("HomeFeaturedStock", back_populates="stock", cascade="all, delete-orphan")

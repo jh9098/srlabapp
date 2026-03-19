@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>지지저항Lab Admin</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background:#f5f6fa; color:#222; }
+    header { background:#111827; color:#fff; padding:16px 24px; }
+    main { padding:16px; display:grid; gap:16px; }
+    section { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+    h2 { margin-top:0; }
+    .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); }
+    .card { background:#eef2ff; padding:12px; border-radius:10px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { border-bottom:1px solid #e5e7eb; padding:8px; text-align:left; vertical-align:top; }
+    input, textarea, select, button { width:100%; padding:8px; margin-top:6px; box-sizing:border-box; }
+    button { background:#2563eb; color:#fff; border:none; border-radius:8px; cursor:pointer; }
+    button.secondary { background:#4b5563; }
+    .two { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+    pre { white-space:pre-wrap; word-break:break-word; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>지지저항Lab 운영 관리자</h1>
+  <p>예쁜 UI보다 운영 가능성에 초점을 둔 MVP 관리자 화면입니다.</p>
+</header>
+<main>
+  <section>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <label style="flex:1; min-width:220px;">API Base URL<input id="baseUrl" value="http://127.0.0.1:8000/api/v1" /></label>
+      <label style="flex:1; min-width:220px;">Admin Identifier<input id="adminId" value="admin-local" /></label>
+      <button style="max-width:180px; align-self:end;" onclick="loadAll()">전체 새로고침</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>대시보드</h2>
+    <div id="dashboard" class="grid"></div>
+  </section>
+
+  <section class="two">
+    <div>
+      <h2>종목 관리</h2>
+      <form id="stockForm">
+        <input name="code" placeholder="종목코드" required />
+        <input name="name" placeholder="종목명" required />
+        <select name="market_type"><option>KOSPI</option><option>KOSDAQ</option><option>ETF</option><option>ETN</option><option>OTHER</option></select>
+        <input name="sector" placeholder="섹터" />
+        <input name="theme_tags" placeholder="테마 태그" />
+        <textarea name="operator_memo" placeholder="운영 메모"></textarea>
+        <label><input type="checkbox" name="is_active" checked /> 활성</label>
+        <button type="submit">종목 저장</button>
+      </form>
+      <div id="stocks"></div>
+    </div>
+    <div>
+      <h2>가격 레벨 관리</h2>
+      <form id="levelForm">
+        <input name="stock_id" placeholder="stock_id" required />
+        <select name="level_type"><option>SUPPORT</option><option>RESISTANCE</option></select>
+        <input name="price" placeholder="가격" required />
+        <input name="proximity_threshold_pct" placeholder="근접 임계치" value="1.50" />
+        <input name="rebound_threshold_pct" placeholder="반등 임계치" value="5.00" />
+        <input name="source_label" placeholder="source_label" value="operator" />
+        <textarea name="note" placeholder="메모"></textarea>
+        <label><input type="checkbox" name="is_active" checked /> 활성</label>
+        <button type="submit">레벨 저장</button>
+      </form>
+      <div id="levels"></div>
+    </div>
+  </section>
+
+  <section class="two">
+    <div>
+      <h2>지지선 상태 조회 / 강제 수정</h2>
+      <div id="states"></div>
+    </div>
+    <div>
+      <h2>수동 푸시 발송</h2>
+      <form id="pushForm">
+        <input name="user_identifier" placeholder="user_identifier" required />
+        <input name="title" placeholder="제목" required />
+        <textarea name="message" placeholder="메시지" required></textarea>
+        <input name="target_path" placeholder="target_path" value="/notifications" />
+        <textarea name="memo" placeholder="발송 사유 memo" required></textarea>
+        <button type="submit">수동 푸시 저장</button>
+      </form>
+      <h2>홈 노출 관리</h2>
+      <form id="homeForm">
+        <textarea name="items" rows="5" placeholder='[{"stock_id":1,"display_order":1,"is_active":true}]'></textarea>
+        <button type="submit">홈 노출 저장</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="two">
+    <div>
+      <h2>신호 이벤트 조회</h2>
+      <div id="events"></div>
+    </div>
+    <div>
+      <h2>테마 관리</h2>
+      <form id="themeForm">
+        <input name="name" placeholder="테마명" required />
+        <input name="score" placeholder="점수" />
+        <textarea name="summary" placeholder="요약"></textarea>
+        <textarea name="stocks" rows="5" placeholder='[{"stock_id":1,"role_type":"LEADER","score":90}]'></textarea>
+        <label><input type="checkbox" name="is_active" checked /> 활성</label>
+        <button type="submit">테마 저장</button>
+      </form>
+      <div id="themes"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>운영 로그 조회</h2>
+    <div id="logs"></div>
+  </section>
+</main>
+<script>
+const el = id => document.getElementById(id);
+function api(path, options = {}) {
+  const base = el('baseUrl').value.replace(/\/$/, '');
+  return fetch(`${base}${path}`, {
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Identifier': el('adminId').value, ...(options.headers || {}) },
+    ...options,
+  }).then(r => r.json());
+}
+function table(container, rows) {
+  if (!rows?.length) { container.innerHTML = '<p>데이터가 없습니다.</p>'; return; }
+  const keys = Object.keys(rows[0]);
+  container.innerHTML = `<table><thead><tr>${keys.map(k => `<th>${k}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${keys.map(k => `<td>${typeof row[k] === 'object' ? JSON.stringify(row[k]) : row[k] ?? ''}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+async function loadAll() {
+  const dashboard = await api('/admin/dashboard');
+  el('dashboard').innerHTML = Object.entries(dashboard.data).map(([k,v]) => `<div class="card"><strong>${k}</strong><div>${v}</div></div>`).join('');
+  table(el('stocks'), (await api('/admin/stocks')).data);
+  table(el('levels'), (await api('/admin/price-levels')).data);
+  const states = (await api('/admin/support-states')).data;
+  el('states').innerHTML = states.map(s => `
+    <div class="card">
+      <strong>${s.stock_name} (${s.stock_code})</strong><br/>${s.status}<br/>${s.status_reason || ''}
+      <select id="status-${s.id}"><option>WAITING</option><option>TESTING_SUPPORT</option><option>DIRECT_REBOUND_SUCCESS</option><option>BREAK_REBOUND_SUCCESS</option><option>REUSABLE</option><option>INVALID</option></select>
+      <textarea id="memo-${s.id}" placeholder="수정 사유 memo"></textarea>
+      <button onclick="forceState(${s.id})">상태 강제 수정</button>
+    </div>`).join('');
+  table(el('events'), (await api('/admin/signal-events')).data);
+  table(el('themes'), (await api('/admin/themes')).data);
+  table(el('logs'), (await api('/admin/audit-logs')).data.items);
+}
+async function forceState(id) {
+  await api(`/admin/support-states/${id}/force`, { method: 'PATCH', body: JSON.stringify({ status: el(`status-${id}`).value, memo: el(`memo-${id}`).value || '운영자 수정' }) });
+  loadAll();
+}
+function formJson(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  for (const box of form.querySelectorAll('input[type="checkbox"]')) data[box.name] = box.checked;
+  return data;
+}
+el('stockForm').onsubmit = async e => { e.preventDefault(); await api('/admin/stocks', { method: 'POST', body: JSON.stringify(formJson(e.target)) }); e.target.reset(); loadAll(); };
+el('levelForm').onsubmit = async e => { e.preventDefault(); await api('/admin/price-levels', { method: 'POST', body: JSON.stringify(formJson(e.target)) }); e.target.reset(); loadAll(); };
+el('pushForm').onsubmit = async e => { e.preventDefault(); await api('/admin/manual-push', { method: 'POST', body: JSON.stringify(formJson(e.target)) }); e.target.reset(); loadAll(); };
+el('homeForm').onsubmit = async e => { e.preventDefault(); const payload = { items: JSON.parse(formJson(e.target).items || '[]') }; await api('/admin/home-featured', { method: 'PUT', body: JSON.stringify(payload) }); loadAll(); };
+el('themeForm').onsubmit = async e => { e.preventDefault(); const payload = formJson(e.target); payload.stocks = JSON.parse(payload.stocks || '[]'); await api('/admin/themes', { method: 'POST', body: JSON.stringify(payload) }); e.target.reset(); loadAll(); };
+loadAll();
+</script>
+</body>
+</html>

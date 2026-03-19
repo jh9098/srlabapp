@@ -11,6 +11,7 @@ from app.models.price_level import PriceLevel
 from app.models.signal_event import SignalEvent
 from app.models.stock import Stock
 from app.models.support_state import SupportState
+from app.services.notification_service import NotificationService
 from app.services.support_state_engine import SupportStateEvaluationResult
 
 SIGNAL_LABELS = {
@@ -26,6 +27,7 @@ SIGNAL_LABELS = {
 class SignalEventService:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.notification_service = NotificationService(db)
 
     def create_for_state_change(
         self,
@@ -64,6 +66,7 @@ class SignalEventService:
         )
         self.db.add(event)
         self.db.flush()
+        self.notification_service.create_from_signal_event(event)
         return event
 
     def _build_signal_key(
