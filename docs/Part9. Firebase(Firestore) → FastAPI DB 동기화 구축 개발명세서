@@ -1,0 +1,377 @@
+# Part9. Firebase(Firestore) → FastAPI DB 동기화 구축 개발명세서
+버전: v1.0
+대상: Codex / 백엔드 개발
+목적: 기존 지지저항랩 Firebase 데이터(adminWatchlist, stock_prices)를 새 FastAPI 백엔드 DB(stocks, price_levels, daily_bars, home_featured_stocks)에 동기화하여 홈/상세/관심종목 화면에서 가격/지지선/저항선이 정상 표시되게 한다.
+
+---
+
+## 0. 이번 파트 한 줄 정의
+
+기존 Firebase 데이터를 버리지 않고,
+백엔드가 Firebase를 읽어 내부 DB로 동기화하도록 만들어
+앱/관리자웹/배치가 모두 같은 가격/레벨 데이터를 보게 만든다.
+
+---
+
+## 1. 이번 파트의 핵심 목표
+
+1. Firestore `adminWatchlist` 컬렉션을 읽어서 `stocks`, `price_levels`를 동기화한다.
+2. Firestore `stock_prices` 컬렉션을 읽어서 `daily_bars`를 동기화한다.
+3. 필요 시 `adminWatchlist` 상위 종목을 `home_featured_stocks`에도 반영한다.
+4. 동기화 스크립트는 **재실행해도 중복 없이 안전하게** 동작해야 한다.
+5. 홈 화면의 "종목 가격 데이터가 아직 준비되지 않았습니다" 상태를 해소한다.
+
+---
+
+## 2. Firebase 원본 데이터 구조
+
+### 2-1. adminWatchlist 컬렉션
+문서 필드:
+- `ticker`: 종목코드 문자열
+- `name`: 종목명
+- `supportLines`: 지지선 가격 배열
+- `resistanceLines`: 저항선 가격 배열
+- `createdAt`: 등록일시
+
+### 2-2. stock_prices 컬렉션
+문서 ID:
+- 종목코드
+
+문서 필드:
+- `name`: 종목명
+- `prices`: 배열
+  - `date`: "YYYY-MM-DD"
+  - `open`
+  - `high`
+  - `low`
+  - `close`
+  - `volume`
+
+---
+
+## 3. FastAPI 대상 테이블 매핑 규칙
+
+### 3-1. stocks
+매핑:
+- `ticker` -> `stocks.code`
+- `name` -> `stocks.name`
+- `market_type` -> 기본값 `OTHER`
+- `sector` -> null 유지
+- `theme_tags` -> null 유지
+- `operator_memo` -> 필요 시 `"firebase:adminWatchlist"` 등 출처 메모 저장 가능
+- `is_active` -> true
+
+규칙:
+- `code` 기준 upsert
+- 이미 존재하면 이름/활성 여부만 보정
+- 종목명 충돌 시 Firebase 값을 우선 반영
+
+### 3-2. price_levels
+매핑:
+- `supportLines[]` -> `price_levels`
+  - `level_type = SUPPORT`
+- `resistanceLines[]` -> `price_levels`
+  - `level_type = RESISTANCE`
+
+공통값:
+- `stock_id` = `stocks.id`
+- `source_label` = `FIREBASE_ADMIN_WATCHLIST`
+- `note` = `imported from adminWatchlist`
+- `is_active` = true
+
+규칙:
+- **같은 stock_id + source_label 의 기존 Firebase 레벨은 먼저 비활성화 또는 삭제 후 재삽입**
+- 수동 입력 레벨(source_label이 다른 데이터)은 건드리지 않는다.
+- 배열 내 중복 가격은 제거 후 저장한다.
+- 문자열/정수/실수 혼합 입력도 Decimal로 정규화한다.
+
+### 3-3. daily_bars
+매핑:
+- `stock_prices/{ticker}` 문서 ID -> `stocks.code`
+- `prices[].date` -> `daily_bars.trade_date`
+- `open` -> `open_price`
+- `high` -> `high_price`
+- `low` -> `low_price`
+- `close` -> `close_price`
+- `volume` -> `volume`
+
+추가 계산:
+- `change_value = 금일 close - 전일 close`
+- `change_pct = ((금일 close - 전일 close) / 전일 close) * 100`
+- 첫 번째 데이터 또는 전일 종가 없으면 둘 다 0 처리
+
+규칙:
+- `stock_id + trade_date` 기준 idempotent upsert
+- 기존 바가 있으면 OHLCV/update
+- 없으면 insert
+- `prices` 배열은 날짜 오름차순 정렬 후 처리
+- 잘못된 날짜/음수/필수값 누락 데이터는 skip하고 로그 남긴다.
+
+### 3-4. home_featured_stocks
+목적:
+- 홈 화면은 `home_featured_stocks`를 우선 사용하므로,
+  Firebase 관심종목을 홈 노출에도 바로 쓰려면 동기화가 필요하다.
+
+규칙:
+- 옵션 기능으로 구현
+- `--sync-home-featured` 플래그가 있을 때만 수행
+- 정렬 기준:
+  - 1순위: `createdAt` 오름차순 또는 최신순 중 하나를 명시적으로 선택
+  - 기본 권장: 최신 등록 우선
+- `display_order`는 정렬 순서대로 1..N
+- 기본 limit: 10 또는 20
+- 기존 수동 홈 구성 유지가 필요하면 이 옵션은 끌 수 있어야 한다.
+
+---
+
+## 4. 저장소 기준 필수 개선 사항
+
+### 4-1. daily_bars 중복 방지 보강
+현재 구조상 `daily_bars`는 인덱스는 있지만,
+`stock_id + trade_date` unique 보장이 없는 상태다.
+
+반드시 아래 중 하나를 적용한다.
+
+#### 권장안
+- Alembic migration 추가
+- `daily_bars(stock_id, trade_date)` unique constraint 생성
+
+#### 차선안
+- 스크립트에서 row 조회 후 update/insert 분기
+- 단, 장기적으로는 DB unique constraint를 추가하는 것이 맞다.
+
+### 4-2. Firebase imported 레벨 관리 규칙 고정
+`source_label = FIREBASE_ADMIN_WATCHLIST` 규칙을 도입해서
+수동 관리자 입력 레벨과 Firebase 동기화 레벨이 섞이지 않게 한다.
+
+---
+
+## 5. 구현 파일 범위
+
+### 신규 추가 파일
+- `backend_api/app/integrations/firebase_admin.py`
+- `backend_api/app/services/firebase_sync_service.py`
+- `backend_api/scripts/sync_firebase_watchlist_prices.py`
+- `backend_api/tests/test_firebase_sync_service.py`
+
+### 수정 파일
+- `backend_api/app/core/config.py`
+- `backend_api/pyproject.toml`
+- `backend_api/.env.example`
+- Alembic migration 파일 1개 추가 (daily_bars unique constraint 필요 시)
+
+---
+
+## 6. 설정값 추가
+
+`config.py` 및 `.env.example` 에 아래 설정 추가:
+
+- `firebase_project_id`
+- `firebase_credentials_file`
+- `firebase_watchlist_collection=adminWatchlist`
+- `firebase_prices_collection=stock_prices`
+- `firebase_sync_home_featured_enabled=false`
+- `firebase_sync_home_featured_limit=10`
+
+원칙:
+- 로컬/서버에서는 `GOOGLE_APPLICATION_CREDENTIALS` 환경변수 우선
+- `firebase_credentials_file` 는 보조 옵션
+- 자격증명 JSON 파일은 저장소에 커밋하지 않는다.
+
+---
+
+## 7. firebase_admin 초기화 규칙
+
+### 7-1. 초기화 방식
+- Firebase Admin SDK 사용
+- app singleton 보장
+- 이미 initialize 되어 있으면 재초기화하지 않음
+
+### 7-2. 인증 방식
+우선순위:
+1. `GOOGLE_APPLICATION_CREDENTIALS`
+2. `firebase_credentials_file`
+3. 실패 시 명확한 예외 메시지
+
+### 7-3. 반환 객체
+- Firestore client 반환 함수 제공
+- 서비스 계층에서 재사용 가능하도록 분리
+
+---
+
+## 8. 동기화 서비스 상세 요구사항
+
+### 8-1. `sync_watchlist_stocks_and_levels()`
+역할:
+- `adminWatchlist` 전체 조회
+- 종목 upsert
+- support/resistance 레벨 동기화
+- 결과 요약 반환
+
+반환 예시:
+- scanned_count
+- stock_upserted_count
+- level_inserted_count
+- level_deleted_count
+- skipped_count
+- error_count
+
+### 8-2. `sync_daily_bars()`
+역할:
+- `stock_prices` 전체 또는 지정 ticker 조회
+- prices 배열을 daily_bars로 upsert
+- change_value/change_pct 계산
+- 결과 요약 반환
+
+옵션:
+- `tickers: list[str] | None`
+- `replace_existing: bool = False`
+- `max_bars_per_stock: int | None`
+
+### 8-3. `sync_home_featured()`
+역할:
+- `adminWatchlist` 기준으로 home_featured_stocks 재구성
+
+옵션:
+- `enabled`
+- `limit`
+- `sort_by = createdAt_desc`
+
+### 8-4. `run_full_sync()`
+순서:
+1. watchlist 종목/레벨 동기화
+2. 가격바 동기화
+3. 옵션이면 home_featured 동기화
+4. 요약 결과 반환
+
+---
+
+## 9. CLI 스크립트 요구사항
+
+파일:
+- `backend_api/scripts/sync_firebase_watchlist_prices.py`
+
+지원 옵션:
+- `--mode full`
+- `--mode watchlist`
+- `--mode prices`
+- `--mode home-featured`
+- `--ticker 005930` (복수 허용)
+- `--sync-home-featured`
+- `--home-featured-limit 10`
+- `--replace-existing-bars`
+- `--max-bars-per-stock 300`
+- `--dry-run`
+
+출력:
+- 사람이 읽기 쉬운 요약
+- 실패 ticker 목록
+- skip 사유
+- 최종 success/fail count
+
+예시 실행:
+- 전체 동기화
+- 특정 종목만 가격 동기화
+- 홈 노출만 재구성
+
+---
+
+## 10. 검증 기준
+
+### 10-1. 데이터 검증
+- `stocks.code`에 Firebase ticker가 반영된다.
+- `price_levels`에 SUPPORT / RESISTANCE 가 각각 들어간다.
+- `daily_bars`에 날짜별 OHLCV가 들어간다.
+- 홈 추천 종목이 daily_bars를 참조하여 현재가를 표시할 수 있다.
+
+### 10-2. 기능 검증
+- `/api/v1/home` 호출 시 featured_stocks의 current_price 가 null/empty가 아니다.
+- `/api/v1/stocks/{code}` 호출 시 chart.daily_bars가 내려온다.
+- 앱 홈에서 "종목 가격 데이터가 아직 준비되지 않았습니다" 메시지가 사라진다.
+- 종목 상세 차트가 정상 표시된다.
+
+### 10-3. 재실행 검증
+- 스크립트를 2번 돌려도 중복 row 폭증이 없다.
+- price_levels 중 Firebase source만 안전하게 교체된다.
+- daily_bars는 같은 날짜 데이터가 중복 삽입되지 않는다.
+
+---
+
+## 11. 테스트 요구사항
+
+### 단위 테스트
+- Firebase watchlist 문서 1건 -> stocks/price_levels 매핑 테스트
+- Firebase prices 문서 1건 -> daily_bars 매핑 테스트
+- change_value/change_pct 계산 테스트
+- dry-run 시 DB commit이 일어나지 않는지 테스트
+
+### 통합 테스트
+- full sync 후 `/api/v1/home` 응답 검증
+- full sync 후 `/api/v1/stocks/{code}` 응답 검증
+
+---
+
+## 12. ChatGPT의 의견
+
+### createdAt 저장 방식
+현재 DB 핵심 테이블에는 Firebase의 `createdAt`을 저장할 전용 컬럼이 없다.
+그래서 이번 파트에서는:
+- **기본안: 정렬/표시 순서 계산용으로만 사용**
+- 별도 저장은 하지 않음
+
+이게 가장 깔끔하다.
+
+향후 createdAt 이력이 꼭 필요하면:
+- `stocks.operator_memo`에 억지 저장하지 말고
+- 별도 `imported_from / source_created_at` 컬럼을 추가하는 쪽이 낫다.
+
+---
+
+## 13. 완료 체크리스트
+
+### 필수
+- [ ] firebase-admin 의존성 추가
+- [ ] config/env 설정 추가
+- [ ] firebase_admin client 초기화 모듈 추가
+- [ ] watchlist -> stocks/price_levels sync 구현
+- [ ] stock_prices -> daily_bars sync 구현
+- [ ] full sync CLI 스크립트 구현
+- [ ] 테스트 추가
+- [ ] home API 에서 가격 표시 확인
+
+### 강력 권장
+- [ ] `daily_bars(stock_id, trade_date)` unique constraint 추가
+- [ ] home_featured 동기화 옵션 추가
+- [ ] dry-run 옵션 추가
+- [ ] 에러 ticker 요약 출력 추가
+
+---
+
+## 14. 작업 후 보고 형식
+
+```text
+[Part9 완료 보고]
+
+1. 추가/수정 파일
+- ...
+
+2. Firebase 설정 방식
+- GOOGLE_APPLICATION_CREDENTIALS 사용 여부
+- firebase_credentials_file 사용 여부
+
+3. 동기화 결과
+- watchlist scanned:
+- stock upserted:
+- levels inserted:
+- bars inserted:
+- bars updated:
+- skipped:
+- errors:
+
+4. 검증 결과
+- /api/v1/home:
+- /api/v1/stocks/{code}:
+- Flutter 홈 표시 여부:
+
+5. 남은 이슈
+- ...
