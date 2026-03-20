@@ -47,7 +47,7 @@ class MyScreen extends StatelessWidget {
               const ListTile(
                 leading: Icon(Icons.contact_support_outlined),
                 title: Text('문의 / 공지'),
-                subtitle: Text('운영 공지는 추후 연결 예정입니다.'),
+                subtitle: Text('공지와 문의 채널은 운영 준비가 끝나면 이 화면에서 안내됩니다.'),
               ),
             ],
           ),

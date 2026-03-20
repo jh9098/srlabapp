@@ -1,6 +1,6 @@
 """add notification dispatcher delivery fields
 
-Revision ID: 20260320_000005
+Revision ID: 20260320_000006
 Revises: 20260319_000004
 Create Date: 2026-03-20 00:00:05
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "20260320_000005"
-down_revision = "20260319_000004"
+revision = "20260320_000006"
+down_revision = "20260320_000005"
 branch_labels = None
 depends_on = None
 
