@@ -90,11 +90,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         Text(item.message),
                         const SizedBox(height: 8),
                         Text(
-                          '${item.notificationType} · ${item.createdAt.toLocal()}',
+                          '${item.notificationType} · ${item.deliveryStatus} · ${item.createdAt.toLocal()}',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
                     ),
+                    onTap: () async {
+                      if (!item.isRead) {
+                        await _markAsRead(item);
+                      }
+                      if (!context.mounted) {
+                        return;
+                      }
+                      await AppScope.of(context).appNavigator.openTargetPath(
+                        item.targetPath,
+                      );
+                    },
                     trailing: item.isRead
                         ? const Icon(Icons.done_all_rounded)
                         : TextButton(

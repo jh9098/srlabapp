@@ -5,6 +5,10 @@ class NotificationItemModel {
     required this.title,
     required this.message,
     required this.targetPath,
+    required this.deliveryStatus,
+    required this.responseMessageId,
+    required this.failureReason,
+    required this.retryCount,
     required this.isRead,
     required this.createdAt,
   });
@@ -14,6 +18,10 @@ class NotificationItemModel {
   final String title;
   final String message;
   final String? targetPath;
+  final String deliveryStatus;
+  final String? responseMessageId;
+  final String? failureReason;
+  final int retryCount;
   final bool isRead;
   final DateTime createdAt;
 
@@ -24,6 +32,10 @@ class NotificationItemModel {
       title: json['title'] as String,
       message: json['message'] as String,
       targetPath: json['target_path'] as String?,
+      deliveryStatus: json['delivery_status'] as String? ?? 'pending',
+      responseMessageId: json['response_message_id'] as String?,
+      failureReason: json['failure_reason'] as String?,
+      retryCount: json['retry_count'] as int? ?? 0,
       isRead: json['is_read'] as bool,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
