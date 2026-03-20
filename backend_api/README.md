@@ -69,6 +69,31 @@ Authorization: Bearer <token>
 - `FCM_ENABLED=true` 와 `FCM_SERVER_KEY` 가 설정되면 실제 HTTP 전송을 시도합니다.
 - 설정이 없으면 DB 저장 + 로그 fallback 으로 동작합니다.
 
+## 신호 자동 생성 배치
+
+저장된 `daily_bars` 최신 종가와 활성 `price_levels` 를 기준으로 아래 4가지 이벤트를 자동 생성합니다.
+
+- `support_near` (`SignalType.SUPPORT_NEAR`)
+- `support_break` (`SignalType.SUPPORT_INVALIDATED` 로 저장)
+- `resistance_near` (`SignalType.RESISTANCE_NEAR`)
+- `resistance_breakout` (`SignalType.RESISTANCE_BREAKOUT`)
+
+실행 예시:
+
+```bash
+python -m app.tasks.run_signal_monitor --dry-run
+python -m app.tasks.run_signal_monitor
+```
+
+동작 요약:
+
+- 종목별 최신 `daily_bars` 1건과 활성 레벨만 검사
+- 레벨별 `proximity_threshold_pct` 가 있으면 우선 사용, 없으면 기본 허용오차 `1.00%` 사용
+- 동일 종목 + 동일 레벨 + 동일 이벤트 타입 + 동일 날짜는 `signal_key` 및 날짜 조건으로 중복 생성 방지
+- `signal_event` 생성 후 관심종목 + 알림 허용 사용자 기준으로 `notifications` 후보 레코드를 생성
+- 배치에서는 `dispatch_push=False` 로 동작하므로 실제 푸시는 보내지 않고 DB 후보만 적재
+- 일부 종목에서 오류가 나더라도 rollback 후 다음 종목 처리를 계속 진행
+
 ## 테스트
 
 ```bash

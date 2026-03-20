@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,6 +14,16 @@ from app.models.stock import Stock
 from app.models.support_state import SupportState
 from app.services.notification_service import NotificationService
 from app.services.support_state_engine import SupportStateEvaluationResult
+
+if TYPE_CHECKING:
+    from app.services.signal_batch_service import SignalCandidate
+
+PRICE_LEVEL_SIGNAL_LABELS = {
+    SignalType.SUPPORT_NEAR: "지지선 접근",
+    SignalType.SUPPORT_INVALIDATED: "지지선 이탈",
+    SignalType.RESISTANCE_NEAR: "저항선 접근",
+    SignalType.RESISTANCE_BREAKOUT: "저항선 돌파",
+}
 
 SIGNAL_LABELS = {
     SignalType.SUPPORT_NEAR: "지지선 접근",
@@ -69,6 +80,48 @@ class SignalEventService:
         self.notification_service.create_from_signal_event(event)
         return event
 
+    def create_price_level_event(self, candidate: SignalCandidate) -> SignalEvent | None:
+        signal_key = self.build_price_level_signal_key(candidate)
+        existing = self.db.scalar(select(SignalEvent).where(SignalEvent.signal_key == signal_key))
+        if existing:
+            return existing
+
+        event_time = datetime.combine(candidate.event_date, datetime.min.time(), tzinfo=timezone.utc)
+        event = SignalEvent(
+            stock_id=candidate.stock.id,
+            price_level_id=candidate.price_level.id,
+            support_state_id=None,
+            signal_type=candidate.signal_type,
+            signal_key=signal_key,
+            title=f"{candidate.stock.name} {PRICE_LEVEL_SIGNAL_LABELS[candidate.signal_type]}",
+            message=self._build_price_level_message(candidate),
+            status_from=None,
+            status_to=None,
+            trigger_price=candidate.trigger_price,
+            event_time=event_time,
+        )
+        self.db.add(event)
+        self.db.flush()
+        return event
+
+    def create_notifications_for_event(
+        self,
+        event: SignalEvent,
+        *,
+        dispatch_push: bool = True,
+    ) -> int:
+        notifications = self.notification_service.create_from_signal_event(
+            event,
+            dispatch_push=dispatch_push,
+        )
+        return len(notifications)
+
+    def build_price_level_signal_key(self, candidate: SignalCandidate) -> str:
+        return (
+            f"price-level:{candidate.price_level.id}:signal:{candidate.signal_type.value}:"
+            f"date:{candidate.event_date.isoformat()}"
+        )
+
     def _build_signal_key(
         self,
         *,
@@ -96,3 +149,16 @@ class SignalEventService:
         if signal_type == SignalType.SUPPORT_INVALIDATED:
             return f"{stock_name} 지지선이 재하락으로 무효화되었습니다."
         return f"{stock_name} 신호가 발생했습니다. 현재가 {last_price}원"
+
+    def _build_price_level_message(self, candidate: SignalCandidate) -> str:
+        level_price = candidate.price_level.price
+        trigger_price = candidate.trigger_price
+        if candidate.signal_type == SignalType.SUPPORT_NEAR:
+            return f"{candidate.stock.name}이(가) 지지선 {level_price}원 부근에 도달했습니다. 현재가 {trigger_price}원"
+        if candidate.signal_type == SignalType.SUPPORT_INVALIDATED:
+            return f"{candidate.stock.name}이(가) 지지선 {level_price}원을 이탈했습니다. 현재가 {trigger_price}원"
+        if candidate.signal_type == SignalType.RESISTANCE_NEAR:
+            return f"{candidate.stock.name}이(가) 저항선 {level_price}원 부근에 도달했습니다. 현재가 {trigger_price}원"
+        if candidate.signal_type == SignalType.RESISTANCE_BREAKOUT:
+            return f"{candidate.stock.name}이(가) 저항선 {level_price}원을 돌파했습니다. 현재가 {trigger_price}원"
+        return f"{candidate.stock.name} 가격 레벨 신호가 발생했습니다. 현재가 {trigger_price}원"

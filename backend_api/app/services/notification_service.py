@@ -50,7 +50,12 @@ class NotificationService:
         self.db.flush()
         return setting
 
-    def create_from_signal_event(self, signal_event: SignalEvent) -> list[Notification]:
+    def create_from_signal_event(
+        self,
+        signal_event: SignalEvent,
+        *,
+        dispatch_push: bool = True,
+    ) -> list[Notification]:
         if signal_event.stock_id is None:
             return []
         watchlist_stmt = select(Watchlist.user_identifier).where(
@@ -75,15 +80,16 @@ class NotificationService:
             )
             self.db.add(notification)
             self.db.flush()
-            self.push_service.dispatch_to_user(
-                user_identifier=user_id,
-                payload=PushPayload(
-                    title=notification.title,
-                    message=notification.message,
-                    target_path=notification.target_path,
-                    notification_id=notification.id,
-                ),
-            )
+            if dispatch_push:
+                self.push_service.dispatch_to_user(
+                    user_identifier=user_id,
+                    payload=PushPayload(
+                        title=notification.title,
+                        message=notification.message,
+                        target_path=notification.target_path,
+                        notification_id=notification.id,
+                    ),
+                )
             created.append(notification)
         return created
 
