@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     fcm_project_id: str | None = None
     fcm_server_key: str | None = None
 
+    firebase_project_id: str | None = None
+    firebase_credentials_file: str | None = None
+    firebase_watchlist_collection: str = "adminWatchlist"
+    firebase_prices_collection: str = "stock_prices"
+    firebase_sync_home_featured_enabled: bool = False
+    firebase_sync_home_featured_limit: int = 10
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
