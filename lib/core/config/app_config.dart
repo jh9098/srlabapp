@@ -2,6 +2,8 @@ class AppConfig {
   const AppConfig({
     required this.apiBaseUrl,
     required this.userIdentifier,
+    this.appEnv = 'dev',
+    this.enableVerboseLog = true,
     required this.firebaseProjectId,
     required this.firebaseAppId,
     required this.firebaseApiKey,
@@ -14,6 +16,8 @@ class AppConfig {
 
   final String apiBaseUrl;
   final String userIdentifier;
+  final String appEnv;
+  final bool enableVerboseLog;
   final String firebaseProjectId;
   final String firebaseAppId;
   final String firebaseApiKey;
@@ -30,7 +34,10 @@ class AppConfig {
         (firebaseAppId.isNotEmpty || firebaseAndroidAppId.isNotEmpty || firebaseWebAppId.isNotEmpty);
   }
 
+  bool get isProduction => appEnv == 'prod';
+
   factory AppConfig.fromEnvironment() {
+    const appEnv = String.fromEnvironment('APP_ENV', defaultValue: 'dev');
     return const AppConfig(
       apiBaseUrl: String.fromEnvironment(
         'API_BASE_URL',
@@ -40,6 +47,8 @@ class AppConfig {
         'USER_IDENTIFIER',
         defaultValue: 'demo-user',
       ),
+      appEnv: appEnv,
+      enableVerboseLog: bool.fromEnvironment('ENABLE_VERBOSE_LOG', defaultValue: appEnv != 'prod'),
       firebaseProjectId: String.fromEnvironment('FIREBASE_PROJECT_ID', defaultValue: ''),
       firebaseAppId: String.fromEnvironment('FIREBASE_APP_ID', defaultValue: ''),
       firebaseApiKey: String.fromEnvironment('FIREBASE_API_KEY', defaultValue: ''),

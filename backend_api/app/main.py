@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.v1.health import build_health_payload
 from app.api.v1.router import api_router
 from app.core.config import get_settings
 from app.core.errors import AppError
@@ -10,15 +11,12 @@ from app.schemas.common import ErrorResponse
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name, debug=settings.app_debug)
+app = FastAPI(title=settings.app_name, debug=settings.app_debug, version=settings.app_version)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:4173",
-        "http://localhost:4173",
-    ],
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origins=settings.cors_origins,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,4 +49,9 @@ async def handle_validation_error(_: Request, exc: RequestValidationError) -> JS
 
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"message": f"{settings.app_name} is running"}
+    return {"message": f"{settings.app_name} is running", "environment": settings.app_env}
+
+
+@app.get("/health")
+def root_health() -> dict[str, object]:
+    return build_health_payload()

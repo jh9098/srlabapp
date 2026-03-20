@@ -9,6 +9,8 @@
 
 즉, 지금은 “더 만들기”보다 **코드/문서/실행 흐름을 하나로 맞춘 마지막 마감판**으로 이해하면 됩니다.
 
+추가로 운영 배포 / 환경 분리 / smoke test / rollback 절차는 `docs/08_운영배포_환경분리_가이드.md` 에 정리했습니다.
+
 ---
 
 ## 1. 전체 저장소 구조
@@ -162,19 +164,31 @@ flutter pub get
 ### 5-2. 기본 실행
 
 ```bash
-flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 --dart-define=USER_IDENTIFIER=demo-user
+flutter run \
+  --dart-define=APP_ENV=dev \
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 \
+  --dart-define=USER_IDENTIFIER=demo-user \
+  --dart-define=ENABLE_VERBOSE_LOG=true
 ```
 
 ### 5-3. Android 에뮬레이터 실행 예시
 
 ```bash
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1 --dart-define=USER_IDENTIFIER=demo-user
+flutter run \
+  --dart-define=APP_ENV=dev \
+  --dart-define=API_BASE_URL=http://10.0.2.2:8000/api/v1 \
+  --dart-define=USER_IDENTIFIER=demo-user \
+  --dart-define=ENABLE_VERBOSE_LOG=true
 ```
 
 ### 5-4. Chrome 실행 예시
 
 ```bash
-flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 --dart-define=USER_IDENTIFIER=demo-user
+flutter run -d chrome \
+  --dart-define=APP_ENV=dev \
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 \
+  --dart-define=USER_IDENTIFIER=demo-user \
+  --dart-define=ENABLE_VERBOSE_LOG=true
 ```
 
 ### 5-5. Firebase/FCM 옵션까지 같이 넘기는 예시

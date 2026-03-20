@@ -61,6 +61,7 @@ class MyScreen extends StatelessWidget {
               children: [
                 const Text('앱 연결 정보'),
                 const SizedBox(height: 8),
+                Text('환경: ${config.appEnv}'),
                 Text('API: ${config.apiBaseUrl}'),
                 Text('사용자 식별자: ${config.userIdentifier}'),
                 Text('Firebase 설정 여부: ${config.isFirebaseConfigured ? '설정됨' : '미설정'}'),
