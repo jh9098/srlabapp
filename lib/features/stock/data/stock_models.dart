@@ -1,3 +1,4 @@
+import '../../../core/utils/json_parsers.dart';
 import '../../shared/models/common_models.dart';
 
 class StockSearchItemModel {
@@ -41,11 +42,11 @@ class PriceSnapshotModel {
 
   factory PriceSnapshotModel.fromJson(Map<String, dynamic> json) {
     return PriceSnapshotModel(
-      currentPrice: (json['current_price'] as num).toDouble(),
-      changeValue: (json['change_value'] as num).toDouble(),
-      changePct: (json['change_pct'] as num).toDouble(),
-      dayHigh: (json['day_high'] as num).toDouble(),
-      dayLow: (json['day_low'] as num).toDouble(),
+      currentPrice: parseJsonDouble(json['current_price']),
+      changeValue: parseJsonDouble(json['change_value']),
+      changePct: parseJsonDouble(json['change_pct']),
+      dayHigh: parseJsonDouble(json['day_high']),
+      dayLow: parseJsonDouble(json['day_low']),
       volume: json['volume'] as int,
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );
@@ -72,8 +73,8 @@ class StockLevelModel {
       levelId: json['level_id'] as int,
       levelType: json['level_type'] as String,
       levelOrder: json['level_order'] as int,
-      levelPrice: (json['level_price'] as num).toDouble(),
-      distancePct: (json['distance_pct'] as num?)?.toDouble(),
+      levelPrice: parseJsonDouble(json['level_price']),
+      distancePct: parseNullableJsonDouble(json['distance_pct']),
     );
   }
 }
@@ -98,7 +99,7 @@ class SupportStateModel {
       firstTouchedAt: json['first_touched_at'] == null
           ? null
           : DateTime.parse(json['first_touched_at'] as String),
-      reboundPct: (json['rebound_pct'] as num?)?.toDouble(),
+      reboundPct: parseNullableJsonDouble(json['rebound_pct']),
     );
   }
 }
@@ -179,10 +180,10 @@ class DailyBarModel {
   factory DailyBarModel.fromJson(Map<String, dynamic> json) {
     return DailyBarModel(
       tradeDate: DateTime.parse(json['trade_date'] as String),
-      openPrice: (json['open_price'] as num).toDouble(),
-      highPrice: (json['high_price'] as num).toDouble(),
-      lowPrice: (json['low_price'] as num).toDouble(),
-      closePrice: (json['close_price'] as num).toDouble(),
+      openPrice: parseJsonDouble(json['open_price']),
+      highPrice: parseJsonDouble(json['high_price']),
+      lowPrice: parseJsonDouble(json['low_price']),
+      closePrice: parseJsonDouble(json['close_price']),
       volume: json['volume'] as int,
     );
   }

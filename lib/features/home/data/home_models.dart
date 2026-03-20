@@ -1,3 +1,4 @@
+import '../../../core/utils/json_parsers.dart';
 import '../../shared/models/common_models.dart';
 
 class HomeFeaturedStockModel {
@@ -21,8 +22,8 @@ class HomeFeaturedStockModel {
     return HomeFeaturedStockModel(
       stockCode: json['stock_code'] as String,
       stockName: json['stock_name'] as String,
-      currentPrice: (json['current_price'] as num).toDouble(),
-      changePct: (json['change_pct'] as num).toDouble(),
+      currentPrice: parseJsonDouble(json['current_price']),
+      changePct: parseJsonDouble(json['change_pct']),
       status: StatusBadgeModel.fromJson(json['status'] as Map<String, dynamic>),
       summary: json['summary'] as String,
     );
@@ -70,7 +71,7 @@ class ThemeItemModel {
     return ThemeItemModel(
       themeId: json['theme_id'] as int,
       name: json['name'] as String,
-      score: (json['score'] as num?)?.toDouble(),
+      score: parseNullableJsonDouble(json['score']),
       summary: json['summary'] as String?,
       leaderStock: json['leader_stock'] == null
           ? null

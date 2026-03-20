@@ -15,14 +15,16 @@ branch_labels = None
 depends_on = None
 
 
-notification_type_enum = sa.Enum(
+from sqlalchemy.dialects import postgresql
+
+notification_type_enum = postgresql.ENUM(
     "PRICE_SIGNAL",
     "THEME_SIGNAL",
     "CONTENT_UPDATE",
     "ADMIN_NOTICE",
     name="notification_type_enum",
+    create_type=False,
 )
-
 
 def upgrade() -> None:
     bind = op.get_bind()

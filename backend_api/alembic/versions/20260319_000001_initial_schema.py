@@ -1,12 +1,13 @@
 """initial schema for backend scaffold
 
 Revision ID: 20260319_000001
-Revises: 
+Revises:
 Create Date: 2026-03-19 00:00:01
 """
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "20260319_000001"
@@ -15,9 +16,24 @@ branch_labels = None
 depends_on = None
 
 
-market_type_enum = sa.Enum("KOSPI", "KOSDAQ", "ETF", "ETN", "OTHER", name="market_type_enum")
-price_level_type_enum = sa.Enum("SUPPORT", "RESISTANCE", name="price_level_type_enum")
-support_status_enum = sa.Enum(
+market_type_enum = postgresql.ENUM(
+    "KOSPI",
+    "KOSDAQ",
+    "ETF",
+    "ETN",
+    "OTHER",
+    name="market_type_enum",
+    create_type=False,
+)
+
+price_level_type_enum = postgresql.ENUM(
+    "SUPPORT",
+    "RESISTANCE",
+    name="price_level_type_enum",
+    create_type=False,
+)
+
+support_status_enum = postgresql.ENUM(
     "WAITING",
     "TESTING_SUPPORT",
     "DIRECT_REBOUND_SUCCESS",
@@ -25,6 +41,7 @@ support_status_enum = sa.Enum(
     "REUSABLE",
     "INVALID",
     name="support_status_enum",
+    create_type=False,
 )
 
 
@@ -65,7 +82,12 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.ForeignKeyConstraint(["stock_id"], ["stocks.id"], name=op.f("fk_price_levels_stock_id_stocks"), ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["stock_id"],
+            ["stocks.id"],
+            name=op.f("fk_price_levels_stock_id_stocks"),
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_price_levels")),
     )
 
@@ -81,8 +103,18 @@ def upgrade() -> None:
         sa.Column("status_reason", sa.Text(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.ForeignKeyConstraint(["price_level_id"], ["price_levels.id"], name=op.f("fk_support_states_price_level_id_price_levels"), ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["stock_id"], ["stocks.id"], name=op.f("fk_support_states_stock_id_stocks"), ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["price_level_id"],
+            ["price_levels.id"],
+            name=op.f("fk_support_states_price_level_id_price_levels"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["stock_id"],
+            ["stocks.id"],
+            name=op.f("fk_support_states_stock_id_stocks"),
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_support_states")),
     )
 
@@ -96,7 +128,12 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.ForeignKeyConstraint(["stock_id"], ["stocks.id"], name=op.f("fk_watchlists_stock_id_stocks"), ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["stock_id"],
+            ["stocks.id"],
+            name=op.f("fk_watchlists_stock_id_stocks"),
+            ondelete="CASCADE",
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_watchlists")),
         sa.UniqueConstraint("user_identifier", "stock_id", name="uq_watchlists_user_identifier_stock_id"),
     )

@@ -1,3 +1,4 @@
+import '../../../core/utils/json_parsers.dart';
 import '../../shared/models/common_models.dart';
 
 class PriceDistanceModel {
@@ -8,8 +9,8 @@ class PriceDistanceModel {
 
   factory PriceDistanceModel.fromJson(Map<String, dynamic> json) {
     return PriceDistanceModel(
-      price: (json['price'] as num).toDouble(),
-      distancePct: (json['distance_pct'] as num?)?.toDouble(),
+      price: parseJsonDouble(json['price']),
+      distancePct: parseNullableJsonDouble(json['distance_pct']),
     );
   }
 }
@@ -44,8 +45,8 @@ class WatchlistItemModel {
       watchlistId: json['watchlist_id'] as int,
       stockCode: json['stock_code'] as String,
       stockName: json['stock_name'] as String,
-      currentPrice: (json['current_price'] as num).toDouble(),
-      changePct: (json['change_pct'] as num).toDouble(),
+      currentPrice: parseJsonDouble(json['current_price']),
+      changePct: parseJsonDouble(json['change_pct']),
       status: StatusBadgeModel.fromJson(json['status'] as Map<String, dynamic>),
       nearestSupport: json['nearest_support'] == null
           ? null

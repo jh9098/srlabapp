@@ -15,7 +15,9 @@ branch_labels = None
 depends_on = None
 
 
-signal_type_enum = sa.Enum(
+from sqlalchemy.dialects import postgresql
+
+signal_type_enum = postgresql.ENUM(
     "SUPPORT_NEAR",
     "SUPPORT_TESTING",
     "SUPPORT_DIRECT_REBOUND_SUCCESS",
@@ -26,15 +28,24 @@ signal_type_enum = sa.Enum(
     "RESISTANCE_BREAKOUT",
     "RESISTANCE_REJECTED",
     name="signal_type_enum",
+    create_type=False,
 )
-theme_role_type_enum = sa.Enum("LEADER", "FOLLOWER", name="theme_role_type_enum")
-content_category_enum = sa.Enum(
+from sqlalchemy.dialects import postgresql
+
+theme_role_type_enum = postgresql.ENUM(
+    "LEADER",
+    "FOLLOWER",
+    name="theme_role_type_enum",
+    create_type=False,
+)
+content_category_enum = postgresql.ENUM(
     "STOCK_ANALYSIS",
     "THEME_BRIEF",
     "MARKET_SUMMARY",
     "SHORTS",
     "NOTICE",
     name="content_category_enum",
+    create_type=False,
 )
 
 
