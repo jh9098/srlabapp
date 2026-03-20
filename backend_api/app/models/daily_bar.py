@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Index, Numeric
+from sqlalchemy import Date, ForeignKey, Index, Numeric, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -13,6 +13,7 @@ class DailyBar(TimestampMixin, Base):
     __table_args__ = (
         Index("ix_daily_bars_stock_id", "stock_id"),
         Index("ix_daily_bars_trade_date", "trade_date"),
+        UniqueConstraint("stock_id", "trade_date", name="uq_daily_bars_stock_id_trade_date"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
