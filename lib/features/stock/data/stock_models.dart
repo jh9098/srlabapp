@@ -14,9 +14,9 @@ class StockSearchItemModel {
 
   factory StockSearchItemModel.fromJson(Map<String, dynamic> json) {
     return StockSearchItemModel(
-      stockCode: json['stock_code'] as String,
-      stockName: json['stock_name'] as String,
-      marketType: json['market_type'] as String,
+      stockCode: json['stock_code'] as String? ?? '',
+      stockName: json['stock_name'] as String? ?? '',
+      marketType: json['market_type'] as String? ?? '',
     );
   }
 }
@@ -38,7 +38,7 @@ class PriceSnapshotModel {
   final double dayHigh;
   final double dayLow;
   final int volume;
-  final DateTime updatedAt;
+  final DateTime? updatedAt;
 
   factory PriceSnapshotModel.fromJson(Map<String, dynamic> json) {
     return PriceSnapshotModel(
@@ -47,8 +47,8 @@ class PriceSnapshotModel {
       changePct: parseJsonDouble(json['change_pct']),
       dayHigh: parseJsonDouble(json['day_high']),
       dayLow: parseJsonDouble(json['day_low']),
-      volume: json['volume'] as int,
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      volume: parseJsonInt(json['volume']),
+      updatedAt: parseNullableJsonDateTime(json['updated_at']),
     );
   }
 }
@@ -68,11 +68,14 @@ class StockLevelModel {
   final double levelPrice;
   final double? distancePct;
 
+  bool get isSupport => levelType == 'SUPPORT';
+  bool get isResistance => levelType == 'RESISTANCE';
+
   factory StockLevelModel.fromJson(Map<String, dynamic> json) {
     return StockLevelModel(
-      levelId: json['level_id'] as int,
-      levelType: json['level_type'] as String,
-      levelOrder: json['level_order'] as int,
+      levelId: parseJsonInt(json['level_id']),
+      levelType: json['level_type'] as String? ?? '',
+      levelOrder: parseJsonInt(json['level_order']),
       levelPrice: parseJsonDouble(json['level_price']),
       distancePct: parseNullableJsonDouble(json['distance_pct']),
     );
@@ -94,11 +97,9 @@ class SupportStateModel {
 
   factory SupportStateModel.fromJson(Map<String, dynamic> json) {
     return SupportStateModel(
-      status: json['status'] as String,
+      status: json['status'] as String? ?? '',
       reactionType: json['reaction_type'] as String?,
-      firstTouchedAt: json['first_touched_at'] == null
-          ? null
-          : DateTime.parse(json['first_touched_at'] as String),
+      firstTouchedAt: parseNullableJsonDateTime(json['first_touched_at']),
       reboundPct: parseNullableJsonDouble(json['rebound_pct']),
     );
   }
@@ -113,9 +114,9 @@ class ScenarioModel {
 
   factory ScenarioModel.fromJson(Map<String, dynamic> json) {
     return ScenarioModel(
-      base: json['base'] as String,
-      bull: json['bull'] as String,
-      bear: json['bear'] as String,
+      base: json['base'] as String? ?? '',
+      bull: json['bull'] as String? ?? '',
+      bear: json['bear'] as String? ?? '',
     );
   }
 }
@@ -128,8 +129,8 @@ class ThemeReferenceModel {
 
   factory ThemeReferenceModel.fromJson(Map<String, dynamic> json) {
     return ThemeReferenceModel(
-      themeId: json['theme_id'] as int,
-      name: json['name'] as String,
+      themeId: parseJsonInt(json['theme_id']),
+      name: json['name'] as String? ?? '',
     );
   }
 }
@@ -151,9 +152,9 @@ class ContentReferenceModel {
 
   factory ContentReferenceModel.fromJson(Map<String, dynamic> json) {
     return ContentReferenceModel(
-      contentId: json['content_id'] as int,
-      category: json['category'] as String,
-      title: json['title'] as String,
+      contentId: parseJsonInt(json['content_id']),
+      category: json['category'] as String? ?? '',
+      title: json['title'] as String? ?? '',
       summary: json['summary'] as String?,
       externalUrl: json['external_url'] as String?,
     );
@@ -170,21 +171,74 @@ class DailyBarModel {
     required this.volume,
   });
 
-  final DateTime tradeDate;
+  final DateTime? tradeDate;
   final double openPrice;
   final double highPrice;
   final double lowPrice;
   final double closePrice;
   final int volume;
 
+  bool get hasValidPriceRange => highPrice > 0 && lowPrice > 0 && highPrice >= lowPrice;
+
   factory DailyBarModel.fromJson(Map<String, dynamic> json) {
     return DailyBarModel(
-      tradeDate: DateTime.parse(json['trade_date'] as String),
+      tradeDate: parseNullableJsonDate(json['trade_date']),
       openPrice: parseJsonDouble(json['open_price']),
       highPrice: parseJsonDouble(json['high_price']),
       lowPrice: parseJsonDouble(json['low_price']),
       closePrice: parseJsonDouble(json['close_price']),
-      volume: json['volume'] as int,
+      volume: parseJsonInt(json['volume']),
+    );
+  }
+}
+
+class StockSignalEventModel {
+  const StockSignalEventModel({
+    required this.eventId,
+    required this.signalType,
+    required this.label,
+    required this.message,
+    required this.eventTime,
+  });
+
+  final int eventId;
+  final String signalType;
+  final String label;
+  final String message;
+  final DateTime? eventTime;
+
+  factory StockSignalEventModel.fromJson(Map<String, dynamic> json) {
+    return StockSignalEventModel(
+      eventId: parseJsonInt(json['event_id']),
+      signalType: json['signal_type'] as String? ?? '',
+      label: json['label'] as String? ?? '최근 신호',
+      message: json['message'] as String? ?? '',
+      eventTime: parseNullableJsonDateTime(json['event_time']),
+    );
+  }
+}
+
+class LatestSignalSummaryModel {
+  const LatestSignalSummaryModel({
+    required this.title,
+    required this.summary,
+    required this.signalType,
+    required this.eventTime,
+  });
+
+  final String title;
+  final String summary;
+  final String? signalType;
+  final DateTime? eventTime;
+
+  bool get isEmpty => title.isEmpty && summary.isEmpty && signalType == null && eventTime == null;
+
+  factory LatestSignalSummaryModel.fromJson(Map<String, dynamic> json) {
+    return LatestSignalSummaryModel(
+      title: json['title'] as String? ?? json['label'] as String? ?? '최근 신호',
+      summary: json['summary'] as String? ?? json['message'] as String? ?? '',
+      signalType: json['signal_type'] as String?,
+      eventTime: parseNullableJsonDateTime(json['event_time']),
     );
   }
 }
@@ -202,9 +256,9 @@ class StockWatchlistStateModel {
 
   factory StockWatchlistStateModel.fromJson(Map<String, dynamic> json) {
     return StockWatchlistStateModel(
-      isInWatchlist: json['is_in_watchlist'] as bool,
-      alertEnabled: json['alert_enabled'] as bool,
-      watchlistId: json['watchlist_id'] as int?,
+      isInWatchlist: json['is_in_watchlist'] as bool? ?? false,
+      alertEnabled: json['alert_enabled'] as bool? ?? false,
+      watchlistId: parseNullableJsonInt(json['watchlist_id']),
     );
   }
 }
@@ -222,6 +276,8 @@ class StockDetailModel {
     required this.relatedThemes,
     required this.relatedContents,
     required this.watchlist,
+    required this.latestSignalSummary,
+    required this.recentSignalEvents,
   });
 
   final StockSummaryModel stock;
@@ -235,28 +291,49 @@ class StockDetailModel {
   final List<ThemeReferenceModel> relatedThemes;
   final List<ContentReferenceModel> relatedContents;
   final StockWatchlistStateModel watchlist;
+  final LatestSignalSummaryModel? latestSignalSummary;
+  final List<StockSignalEventModel> recentSignalEvents;
+
+  List<StockLevelModel> get supportLevels => levels.where((item) => item.isSupport).toList();
+  List<StockLevelModel> get resistanceLevels => levels.where((item) => item.isResistance).toList();
+  List<DailyBarModel> get validChartBars => chart.where((item) => item.hasValidPriceRange).toList();
+
+  bool get hasSignalCardData =>
+      recentSignalEvents.isNotEmpty || (latestSignalSummary != null && !latestSignalSummary!.isEmpty);
 
   factory StockDetailModel.fromJson(Map<String, dynamic> json) {
+    final chartJson = json['chart'] as Map<String, dynamic>?;
+    final recentSignalEvents = ((json['recent_signal_events'] ?? json['signal_events']) as List<dynamic>? ?? const [])
+        .map((item) => StockSignalEventModel.fromJson(item as Map<String, dynamic>))
+        .toList();
+    final latestSignalJson = json['latest_signal_summary'] as Map<String, dynamic>?;
+
     return StockDetailModel(
-      stock: StockSummaryModel.fromJson(json['stock'] as Map<String, dynamic>),
-      price: PriceSnapshotModel.fromJson(json['price'] as Map<String, dynamic>),
-      status: StatusBadgeModel.fromJson(json['status'] as Map<String, dynamic>),
-      levels: (json['levels'] as List<dynamic>)
+      stock: StockSummaryModel.fromJson((json['stock'] as Map<String, dynamic>?) ?? const {}),
+      price: PriceSnapshotModel.fromJson((json['price'] as Map<String, dynamic>?) ?? const {}),
+      status: StatusBadgeModel.fromJson((json['status'] as Map<String, dynamic>?) ?? const {}),
+      levels: (json['levels'] as List<dynamic>? ?? const [])
           .map((item) => StockLevelModel.fromJson(item as Map<String, dynamic>))
           .toList(),
-      supportState: SupportStateModel.fromJson(json['support_state'] as Map<String, dynamic>),
-      scenario: ScenarioModel.fromJson(json['scenario'] as Map<String, dynamic>),
-      reasonLines: (json['reason_lines'] as List<dynamic>).cast<String>(),
-      chart: ((json['chart'] as Map<String, dynamic>)['daily_bars'] as List<dynamic>)
+      supportState: SupportStateModel.fromJson((json['support_state'] as Map<String, dynamic>?) ?? const {}),
+      scenario: ScenarioModel.fromJson((json['scenario'] as Map<String, dynamic>?) ?? const {}),
+      reasonLines: (json['reason_lines'] as List<dynamic>? ?? const [])
+          .map((item) => item?.toString() ?? '')
+          .where((item) => item.trim().isNotEmpty)
+          .toList(),
+      chart: ((chartJson?['daily_bars'] ?? json['daily_bars']) as List<dynamic>? ?? const [])
           .map((item) => DailyBarModel.fromJson(item as Map<String, dynamic>))
           .toList(),
-      relatedThemes: (json['related_themes'] as List<dynamic>)
+      relatedThemes: (json['related_themes'] as List<dynamic>? ?? const [])
           .map((item) => ThemeReferenceModel.fromJson(item as Map<String, dynamic>))
           .toList(),
-      relatedContents: (json['related_contents'] as List<dynamic>)
+      relatedContents: (json['related_contents'] as List<dynamic>? ?? const [])
           .map((item) => ContentReferenceModel.fromJson(item as Map<String, dynamic>))
           .toList(),
-      watchlist: StockWatchlistStateModel.fromJson(json['watchlist'] as Map<String, dynamic>),
+      watchlist: StockWatchlistStateModel.fromJson((json['watchlist'] as Map<String, dynamic>?) ?? const {}),
+      latestSignalSummary:
+          latestSignalJson == null ? null : LatestSignalSummaryModel.fromJson(latestSignalJson),
+      recentSignalEvents: recentSignalEvents,
     );
   }
 }

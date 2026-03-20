@@ -18,4 +18,12 @@ class StockRepository {
     final response = await _apiClient.get('/stocks/$stockCode');
     return StockDetailModel.fromJson(response['data'] as Map<String, dynamic>);
   }
+
+  Future<List<StockSignalEventModel>> fetchStockSignals(String stockCode, {int limit = 3}) async {
+    final response = await _apiClient.get('/stocks/$stockCode/signals', queryParameters: {'limit': '$limit'});
+    final data = response['data'] as Map<String, dynamic>;
+    return (data['items'] as List<dynamic>? ?? const [])
+        .map((item) => StockSignalEventModel.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
 }
