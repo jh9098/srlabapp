@@ -14,6 +14,9 @@ from sqlalchemy.pool import StaticPool
 
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
+os.environ["ADMIN_USERNAME"] = "admin"
+os.environ["ADMIN_PASSWORD"] = "admin1234"
+os.environ["ADMIN_JWT_SECRET"] = "test-admin-secret"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db.base import Base

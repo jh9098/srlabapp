@@ -1,3 +1,19 @@
+def test_health_endpoints(client) -> None:
+    root_response = client.get('/health')
+    assert root_response.status_code == 200
+    root_payload = root_response.json()
+    assert root_payload['status'] == 'ok'
+    assert root_payload['environment'] == 'test'
+    assert root_payload['database'] == 'ok'
+
+    api_response = client.get('/api/v1/health')
+    assert api_response.status_code == 200
+    api_payload = api_response.json()['data']
+    assert api_payload['status'] == 'ok'
+    assert api_payload['environment'] == 'test'
+    assert api_payload['database'] == 'ok'
+
+
 def test_get_home_api(client) -> None:
     response = client.get("/api/v1/home", headers={"X-User-Identifier": "demo-user"})
 

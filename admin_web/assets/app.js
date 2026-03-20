@@ -1,7 +1,26 @@
 const storageKey = 'srlab-admin-session';
 
+const runtimeConfig = window.__SRLAB_ADMIN_CONFIG__ || {};
+
+function detectDefaultApiBaseUrl() {
+  if (runtimeConfig.apiBaseUrl) {
+    return String(runtimeConfig.apiBaseUrl).replace(/\/$/, '');
+  }
+  const { protocol, hostname, port } = window.location;
+  if (hostname === '127.0.0.1' || hostname === 'localhost') {
+    return 'http://127.0.0.1:8000/api/v1';
+  }
+  const normalizedPort = port ? `:${port}` : '';
+  return `${protocol}//${hostname}${normalizedPort}/api/v1`;
+}
+
+function detectDefaultAdminUsername() {
+  return runtimeConfig.adminUsername || 'admin';
+}
+
+
 const state = {
-  apiBaseUrl: '',
+  apiBaseUrl: detectDefaultApiBaseUrl(),
   token: '',
   adminUsername: '',
 };
@@ -78,15 +97,17 @@ function persistSession() {
 function loadSession() {
   const saved = localStorage.getItem(storageKey);
   if (!saved) {
-    state.apiBaseUrl = elements.apiBaseUrl.value.trim();
+    state.apiBaseUrl = state.apiBaseUrl || detectDefaultApiBaseUrl();
+    elements.apiBaseUrl.value = state.apiBaseUrl;
+    elements.adminUsername.value = detectDefaultAdminUsername();
     return;
   }
   const parsed = JSON.parse(saved);
-  state.apiBaseUrl = parsed.apiBaseUrl || elements.apiBaseUrl.value.trim();
+  state.apiBaseUrl = parsed.apiBaseUrl || detectDefaultApiBaseUrl();
   state.token = parsed.token || '';
   state.adminUsername = parsed.adminUsername || '';
   elements.apiBaseUrl.value = state.apiBaseUrl;
-  elements.adminUsername.value = state.adminUsername || elements.adminUsername.value;
+  elements.adminUsername.value = state.adminUsername || detectDefaultAdminUsername();
 }
 
 function setLoggedIn(isLoggedIn) {
@@ -363,3 +384,4 @@ if (state.token) {
 } else {
   setLoggedIn(false);
 }
+

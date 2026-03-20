@@ -14,6 +14,42 @@ python scripts/seed_minimum_data.py
 uvicorn app.main:app --reload
 ```
 
+## 환경변수 / 환경분리
+
+backend 설정은 `app/core/config.py` 의 `Settings` 에서 읽습니다.
+
+핵심 값:
+
+- `APP_ENV=dev|staging|prod`
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `ADMIN_JWT_SECRET`
+- `CORS_ORIGINS`
+- `CORS_ORIGIN_REGEX`
+- `SCHEDULER_ENABLED`
+- `SIGNAL_BATCH_ENABLED`
+- `PUSH_ENABLED`
+- `FCM_*`
+
+예시는 `backend_api/.env.example` 를 참고하세요.
+
+## Health Check
+
+- `GET /health`
+- `GET /api/v1/health`
+
+응답에는 아래가 포함됩니다.
+
+- `status`
+- `environment`
+- `version`
+- `database`
+- `scheduler_enabled`
+- `signal_batch_enabled`
+- `push_enabled`
+
 ## 주요 API
 
 ### 앱 API
@@ -48,11 +84,12 @@ uvicorn app.main:app --reload
 
 ## 관리자 인증
 
-기본 로컬 계정은 환경변수 기반입니다.
+관리자 계정은 환경변수 기반 bootstrap 방식입니다.
 
 ```env
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin1234
+ADMIN_PASSWORD=replace-with-admin-password
+ADMIN_JWT_SECRET=replace-with-admin-jwt-secret
 ```
 
 로그인 성공 시 서명 토큰을 발급하고,
@@ -83,6 +120,7 @@ Authorization: Bearer <token>
 ```bash
 python -m app.tasks.run_signal_monitor --dry-run
 python -m app.tasks.run_signal_monitor
+python -m app.tasks.run_notification_dispatcher --limit 50 --max-retry-count 3
 ```
 
 동작 요약:

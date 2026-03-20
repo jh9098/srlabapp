@@ -9,7 +9,20 @@ void main() {
   testWidgets('앱 하단 탭이 표시된다', (tester) async {
     await tester.pumpWidget(
       const SrLabApp(
-        config: AppConfig(apiBaseUrl: 'http://127.0.0.1:8000/api/v1', userIdentifier: 'demo-user'),
+        config: AppConfig(
+          apiBaseUrl: 'http://127.0.0.1:8000/api/v1',
+          userIdentifier: 'demo-user',
+          appEnv: 'test',
+          enableVerboseLog: false,
+          firebaseProjectId: '',
+          firebaseAppId: '',
+          firebaseApiKey: '',
+          firebaseMessagingSenderId: '',
+          firebaseIosBundleId: '',
+          firebaseAndroidAppId: '',
+          firebaseWebAppId: '',
+          firebaseWebVapidKey: '',
+        ),
       ),
     );
 
