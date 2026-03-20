@@ -12,7 +12,7 @@
         <div>
           <p class="eyebrow">Local MVP Admin</p>
           <h1>지지저항Lab 관리자</h1>
-          <p class="subtext">환경변수 기반 관리자 계정으로 로그인한 뒤 종목/레벨/상태/이벤트/홈노출/테마/푸시를 점검합니다.</p>
+          <p class="subtext">종목, 홈 추천, 테마, 콘텐츠를 입력하고 앱 반영 여부를 바로 확인합니다.</p>
         </div>
         <button id="logoutButton" class="ghost-button" hidden>로그아웃</button>
       </header>
@@ -42,6 +42,72 @@
         <div class="grid stats" id="dashboardStats"></div>
       </section>
 
+      <section class="panel" id="crudPanel" hidden>
+        <div class="section-title-row">
+          <h2>운영 입력</h2>
+          <button id="refreshButton" class="ghost-button">전체 새로고침</button>
+        </div>
+        <div class="grid two-column">
+          <article class="form-card">
+            <h3>종목 저장</h3>
+            <label><span>수정 ID (없으면 신규)</span><input id="stockId" placeholder="예: 1" /></label>
+            <label><span>종목코드</span><input id="stockCode" placeholder="005930" /></label>
+            <label><span>종목명</span><input id="stockName" placeholder="삼성전자" /></label>
+            <label><span>시장</span><input id="stockMarketType" value="KOSPI" /></label>
+            <label><span>섹터</span><input id="stockSector" placeholder="반도체" /></label>
+            <label><span>테마 태그</span><input id="stockThemeTags" placeholder="AI반도체,메모리" /></label>
+            <label><span>운영 메모</span><textarea id="stockMemo"></textarea></label>
+            <label class="checkbox"><input type="checkbox" id="stockActive" checked /> <span>앱 노출/활성</span></label>
+            <button id="saveStockButton">종목 저장</button>
+            <p id="stockFormMessage" class="message"></p>
+          </article>
+
+          <article class="form-card">
+            <h3>홈 추천 저장</h3>
+            <label>
+              <span>추천 항목 (한 줄에 stock_id,display_order,is_active)</span>
+              <textarea id="featuredItems">1,1,true
+2,2,true</textarea>
+            </label>
+            <button id="saveFeaturedButton">홈 추천 저장</button>
+            <p id="featuredFormMessage" class="message"></p>
+          </article>
+
+          <article class="form-card">
+            <h3>테마 저장</h3>
+            <label><span>수정 ID (없으면 신규)</span><input id="themeId" placeholder="예: 1" /></label>
+            <label><span>테마명</span><input id="themeName" placeholder="AI 반도체" /></label>
+            <label><span>점수</span><input id="themeScore" placeholder="87" /></label>
+            <label><span>요약</span><textarea id="themeSummary"></textarea></label>
+            <label>
+              <span>연결 종목 (한 줄에 stock_id,role_type,score)</span>
+              <textarea id="themeStocks">2,LEADER,95
+1,FOLLOWER,80</textarea>
+            </label>
+            <label class="checkbox"><input type="checkbox" id="themeActive" checked /> <span>앱 노출/활성</span></label>
+            <button id="saveThemeButton">테마 저장</button>
+            <p id="themeFormMessage" class="message"></p>
+          </article>
+
+          <article class="form-card">
+            <h3>콘텐츠 저장</h3>
+            <label><span>수정 ID (없으면 신규)</span><input id="contentId" placeholder="예: 1" /></label>
+            <label><span>카테고리</span><input id="contentCategory" value="SHORTS" /></label>
+            <label><span>제목</span><input id="contentTitle" placeholder="AI 반도체 1분 요약" /></label>
+            <label><span>요약</span><textarea id="contentSummary"></textarea></label>
+            <label><span>외부 링크</span><input id="contentUrl" placeholder="https://example.com/shorts/301" /></label>
+            <label><span>썸네일 URL</span><input id="contentThumbnailUrl" placeholder="https://..." /></label>
+            <label><span>관련 종목 ID</span><input id="contentStockId" placeholder="1" /></label>
+            <label><span>관련 테마 ID</span><input id="contentThemeId" placeholder="1" /></label>
+            <label><span>정렬 순서</span><input id="contentSortOrder" value="0" /></label>
+            <label><span>게시 시각 ISO8601 (비우면 현재시각)</span><input id="contentPublishedAt" placeholder="2026-03-20T12:00:00+09:00" /></label>
+            <label class="checkbox"><input type="checkbox" id="contentPublished" checked /> <span>앱 노출/게시</span></label>
+            <button id="saveContentButton">콘텐츠 저장</button>
+            <p id="contentFormMessage" class="message"></p>
+          </article>
+        </div>
+      </section>
+
       <section class="panel" id="manualPushPanel" hidden>
         <h2>수동 푸시 발송</h2>
         <div class="grid two-column">
@@ -56,17 +122,15 @@
       </section>
 
       <section class="panel" id="resourcesPanel" hidden>
-        <div class="section-title-row">
-          <h2>운영 데이터 확인</h2>
-          <button id="refreshButton" class="ghost-button">새로고침</button>
-        </div>
+        <h2>운영 데이터 확인</h2>
         <div class="resource-grid">
-          <article><h3>종목</h3><pre id="stocksOutput"></pre></article>
+          <article class="wide"><h3>종목</h3><pre id="stocksOutput"></pre></article>
+          <article><h3>홈 노출</h3><pre id="featuredOutput"></pre></article>
+          <article><h3>테마</h3><pre id="themesOutput"></pre></article>
+          <article class="wide"><h3>콘텐츠</h3><pre id="contentsOutput"></pre></article>
           <article><h3>가격 레벨</h3><pre id="levelsOutput"></pre></article>
           <article><h3>지지 상태</h3><pre id="statesOutput"></pre></article>
           <article><h3>신호 이벤트</h3><pre id="eventsOutput"></pre></article>
-          <article><h3>홈 노출</h3><pre id="featuredOutput"></pre></article>
-          <article><h3>테마</h3><pre id="themesOutput"></pre></article>
           <article class="wide"><h3>감사 로그</h3><pre id="logsOutput"></pre></article>
         </div>
       </section>

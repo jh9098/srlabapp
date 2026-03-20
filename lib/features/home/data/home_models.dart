@@ -20,12 +20,12 @@ class HomeFeaturedStockModel {
 
   factory HomeFeaturedStockModel.fromJson(Map<String, dynamic> json) {
     return HomeFeaturedStockModel(
-      stockCode: json['stock_code'] as String,
-      stockName: json['stock_name'] as String,
+      stockCode: json['stock_code'] as String? ?? '',
+      stockName: json['stock_name'] as String? ?? '',
       currentPrice: parseJsonDouble(json['current_price']),
       changePct: parseJsonDouble(json['change_pct']),
-      status: StatusBadgeModel.fromJson(json['status'] as Map<String, dynamic>),
-      summary: json['summary'] as String,
+      status: StatusBadgeModel.fromJson((json['status'] as Map<String, dynamic>?) ?? const {}),
+      summary: parseJsonString(json['summary'], fallback: '운영자 코멘트가 아직 없습니다.'),
     );
   }
 }
@@ -43,9 +43,23 @@ class HomeWatchlistSignalSummaryModel {
 
   factory HomeWatchlistSignalSummaryModel.fromJson(Map<String, dynamic> json) {
     return HomeWatchlistSignalSummaryModel(
-      supportNearCount: json['support_near_count'] as int,
-      resistanceNearCount: json['resistance_near_count'] as int,
-      warningCount: json['warning_count'] as int,
+      supportNearCount: parseJsonInt(json['support_near_count']),
+      resistanceNearCount: parseJsonInt(json['resistance_near_count']),
+      warningCount: parseJsonInt(json['warning_count']),
+    );
+  }
+}
+
+class ThemeStockSummaryModel {
+  const ThemeStockSummaryModel({required this.stockCode, required this.stockName});
+
+  final String stockCode;
+  final String stockName;
+
+  factory ThemeStockSummaryModel.fromJson(Map<String, dynamic> json) {
+    return ThemeStockSummaryModel(
+      stockCode: parseJsonString(json['stock_code']),
+      stockName: parseJsonString(json['stock_name']),
     );
   }
 }
@@ -58,6 +72,7 @@ class ThemeItemModel {
     required this.summary,
     required this.leaderStock,
     required this.followerStocks,
+    required this.stockCount,
   });
 
   final int themeId;
@@ -66,19 +81,21 @@ class ThemeItemModel {
   final String? summary;
   final ThemeStockSummaryModel? leaderStock;
   final List<ThemeStockSummaryModel> followerStocks;
+  final int stockCount;
 
   factory ThemeItemModel.fromJson(Map<String, dynamic> json) {
     return ThemeItemModel(
-      themeId: json['theme_id'] as int,
-      name: json['name'] as String,
+      themeId: parseJsonInt(json['theme_id']),
+      name: parseJsonString(json['name'], fallback: '이름 없는 테마'),
       score: parseNullableJsonDouble(json['score']),
-      summary: json['summary'] as String?,
+      summary: parseNullableJsonString(json['summary']),
       leaderStock: json['leader_stock'] == null
           ? null
-          : ThemeStockSummaryModel.fromJson(json['leader_stock'] as Map<String, dynamic>),
-      followerStocks: (json['follower_stocks'] as List<dynamic>)
-          .map((item) => ThemeStockSummaryModel.fromJson(item as Map<String, dynamic>))
+          : ThemeStockSummaryModel.fromJson((json['leader_stock'] as Map<String, dynamic>?) ?? const {}),
+      followerStocks: (json['follower_stocks'] as List<dynamic>? ?? const [])
+          .map((item) => ThemeStockSummaryModel.fromJson((item as Map<String, dynamic>?) ?? const {}))
           .toList(),
+      stockCount: parseJsonInt(json['stock_count']),
     );
   }
 }
@@ -90,6 +107,8 @@ class RecentContentModel {
     required this.title,
     required this.summary,
     required this.externalUrl,
+    required this.thumbnailUrl,
+    required this.publishedAt,
   });
 
   final int contentId;
@@ -97,14 +116,44 @@ class RecentContentModel {
   final String title;
   final String? summary;
   final String? externalUrl;
+  final String? thumbnailUrl;
+  final DateTime? publishedAt;
+
+  bool get hasExternalLink => (externalUrl ?? '').trim().isNotEmpty;
 
   factory RecentContentModel.fromJson(Map<String, dynamic> json) {
     return RecentContentModel(
-      contentId: json['content_id'] as int,
-      category: json['category'] as String,
-      title: json['title'] as String,
-      summary: json['summary'] as String?,
-      externalUrl: json['external_url'] as String?,
+      contentId: parseJsonInt(json['content_id']),
+      category: parseJsonString(json['category'], fallback: 'CONTENT'),
+      title: parseJsonString(json['title'], fallback: '제목 없는 콘텐츠'),
+      summary: parseNullableJsonString(json['summary']),
+      externalUrl: parseNullableJsonString(json['external_url']),
+      thumbnailUrl: parseNullableJsonString(json['thumbnail_url']),
+      publishedAt: parseNullableJsonDateTime(json['published_at']),
+    );
+  }
+}
+
+class ThemeDetailModel {
+  const ThemeDetailModel({
+    required this.theme,
+    required this.stocks,
+    required this.recentContents,
+  });
+
+  final ThemeItemModel theme;
+  final List<ThemeStockSummaryModel> stocks;
+  final List<RecentContentModel> recentContents;
+
+  factory ThemeDetailModel.fromJson(Map<String, dynamic> json) {
+    return ThemeDetailModel(
+      theme: ThemeItemModel.fromJson((json['theme'] as Map<String, dynamic>?) ?? const {}),
+      stocks: (json['stocks'] as List<dynamic>? ?? const [])
+          .map((item) => ThemeStockSummaryModel.fromJson((item as Map<String, dynamic>?) ?? const {}))
+          .toList(),
+      recentContents: (json['recent_contents'] as List<dynamic>? ?? const [])
+          .map((item) => RecentContentModel.fromJson((item as Map<String, dynamic>?) ?? const {}))
+          .toList(),
     );
   }
 }
@@ -126,18 +175,18 @@ class HomeResponseModel {
 
   factory HomeResponseModel.fromJson(Map<String, dynamic> json) {
     return HomeResponseModel(
-      marketHeadline: (json['market_summary'] as Map<String, dynamic>)['headline'] as String,
-      featuredStocks: (json['featured_stocks'] as List<dynamic>)
-          .map((item) => HomeFeaturedStockModel.fromJson(item as Map<String, dynamic>))
+      marketHeadline: parseJsonString((json['market_summary'] as Map<String, dynamic>?)?['headline']),
+      featuredStocks: (json['featured_stocks'] as List<dynamic>? ?? const [])
+          .map((item) => HomeFeaturedStockModel.fromJson((item as Map<String, dynamic>?) ?? const {}))
           .toList(),
       watchlistSignalSummary: HomeWatchlistSignalSummaryModel.fromJson(
-        json['watchlist_signal_summary'] as Map<String, dynamic>,
+        (json['watchlist_signal_summary'] as Map<String, dynamic>?) ?? const {},
       ),
-      themes: (json['themes'] as List<dynamic>)
-          .map((item) => ThemeItemModel.fromJson(item as Map<String, dynamic>))
+      themes: (json['themes'] as List<dynamic>? ?? const [])
+          .map((item) => ThemeItemModel.fromJson((item as Map<String, dynamic>?) ?? const {}))
           .toList(),
-      recentContents: (json['recent_contents'] as List<dynamic>)
-          .map((item) => RecentContentModel.fromJson(item as Map<String, dynamic>))
+      recentContents: (json['recent_contents'] as List<dynamic>? ?? const [])
+          .map((item) => RecentContentModel.fromJson((item as Map<String, dynamic>?) ?? const {}))
           .toList(),
     );
   }

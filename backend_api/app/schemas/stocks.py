@@ -74,6 +74,8 @@ class ContentReference(BaseModel):
     title: str
     summary: str | None
     external_url: str | None
+    thumbnail_url: str | None = None
+    published_at: datetime | None = None
 
 
 class DailyBarItem(BaseModel):
@@ -146,6 +148,13 @@ class ThemeItem(BaseModel):
     summary: str | None
     leader_stock: ThemeStockSummary | None
     follower_stocks: list[ThemeStockSummary] = Field(default_factory=list)
+    stock_count: int = 0
+
+
+class ThemeDetailResponseData(BaseModel):
+    theme: ThemeItem
+    stocks: list[ThemeStockSummary] = Field(default_factory=list)
+    recent_contents: list[ContentReference] = Field(default_factory=list)
 
 
 class RecentContentItem(BaseModel):
@@ -154,6 +163,12 @@ class RecentContentItem(BaseModel):
     title: str
     summary: str | None
     external_url: str | None
+    thumbnail_url: str | None = None
+    published_at: datetime | None = None
+
+
+class ContentListResponseData(BaseModel):
+    items: list[RecentContentItem]
 
 
 class HomeResponseData(BaseModel):

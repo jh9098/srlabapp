@@ -1,9 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
-
-
+from pydantic import BaseModel, Field, field_validator
 
 
 class AdminLoginRequest(BaseModel):
@@ -24,13 +22,21 @@ class AdminSessionResponseData(BaseModel):
 
 
 class AdminStockUpsertRequest(BaseModel):
-    code: str
-    name: str
+    code: str = Field(min_length=1)
+    name: str = Field(min_length=1)
     market_type: str
     sector: str | None = None
     theme_tags: str | None = None
     operator_memo: str | None = None
     is_active: bool = True
+
+    @field_validator('code', 'name')
+    @classmethod
+    def strip_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('필수값은 비어 있을 수 없습니다.')
+        return normalized
 
 
 class AdminPriceLevelUpsertRequest(BaseModel):
@@ -53,8 +59,9 @@ class AdminStateForceUpdateRequest(BaseModel):
 
 class HomeFeaturedUpdateItem(BaseModel):
     stock_id: int
-    display_order: int
+    display_order: int = 0
     is_active: bool = True
+    summary: str | None = None
 
 
 class HomeFeaturedUpdateRequest(BaseModel):
@@ -68,11 +75,40 @@ class ThemeStockMapInput(BaseModel):
 
 
 class ThemeUpsertRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1)
     score: Decimal | None = None
     summary: str | None = None
     is_active: bool = True
     stocks: list[ThemeStockMapInput] = Field(default_factory=list)
+
+    @field_validator('name')
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('테마명은 비어 있을 수 없습니다.')
+        return normalized
+
+
+class AdminContentUpsertRequest(BaseModel):
+    category: str
+    title: str = Field(min_length=1)
+    summary: str | None = None
+    external_url: str | None = None
+    thumbnail_url: str | None = None
+    stock_id: int | None = None
+    theme_id: int | None = None
+    published_at: datetime | None = None
+    sort_order: int = 0
+    is_published: bool = True
+
+    @field_validator('title')
+    @classmethod
+    def strip_title(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError('제목은 비어 있을 수 없습니다.')
+        return normalized
 
 
 class ManualPushRequest(BaseModel):

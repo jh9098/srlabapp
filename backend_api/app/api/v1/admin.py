@@ -9,6 +9,7 @@ from app.schemas.admin import (
     AdminAuditLogItem,
     AdminAuditLogsResponseData,
     AdminLoginRequest,
+    AdminContentUpsertRequest,
     AdminLoginResponseData,
     AdminPriceLevelUpsertRequest,
     AdminSessionResponseData,
@@ -206,6 +207,43 @@ def upsert_theme(
     theme = AdminService(db).upsert_theme(theme_id=theme_id, payload=payload, actor_identifier=actor_identifier)
     db.commit()
     return ApiResponse(message="테마를 저장했습니다.", data={"id": theme.id, "name": theme.name})
+
+
+@router.get("/contents", response_model=ApiResponse[list[dict]])
+def list_contents(
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[list[dict]]:
+    _ = actor_identifier
+    items = AdminService(db).list_contents()
+    return ApiResponse(message="관리자 콘텐츠 목록입니다.", data=[{
+        "id": item.id,
+        "category": item.category.value,
+        "title": item.title,
+        "summary": item.summary,
+        "external_url": item.external_url,
+        "thumbnail_url": item.thumbnail_url,
+        "stock_id": item.stock_id,
+        "stock_name": item.stock.name if item.stock else None,
+        "theme_id": item.theme_id,
+        "theme_name": item.theme.name if item.theme else None,
+        "published_at": item.published_at.isoformat() if item.published_at else None,
+        "sort_order": item.sort_order,
+        "is_published": item.is_published,
+    } for item in items])
+
+
+@router.post("/contents", response_model=ApiResponse[dict])
+@router.put("/contents/{content_id}", response_model=ApiResponse[dict])
+def upsert_content(
+    payload: AdminContentUpsertRequest,
+    content_id: int | None = None,
+    actor_identifier: str = Depends(get_admin_actor),
+    db: Session = Depends(get_db),
+) -> ApiResponse[dict]:
+    content = AdminService(db).upsert_content(content_id=content_id, payload=payload, actor_identifier=actor_identifier)
+    db.commit()
+    return ApiResponse(message="콘텐츠를 저장했습니다.", data={"id": content.id, "title": content.title})
 
 
 @router.get("/audit-logs", response_model=ApiResponse[AdminAuditLogsResponseData])

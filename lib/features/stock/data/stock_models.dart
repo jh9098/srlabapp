@@ -155,8 +155,8 @@ class ContentReferenceModel {
       contentId: parseJsonInt(json['content_id']),
       category: json['category'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      summary: json['summary'] as String?,
-      externalUrl: json['external_url'] as String?,
+      summary: parseNullableJsonString(json['summary']),
+      externalUrl: parseNullableJsonString(json['external_url']),
     );
   }
 }
