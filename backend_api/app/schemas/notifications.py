@@ -9,6 +9,10 @@ class NotificationItem(BaseModel):
     title: str
     message: str
     target_path: str | None
+    delivery_status: str
+    response_message_id: str | None
+    failure_reason: str | None
+    retry_count: int
     is_read: bool
     created_at: datetime
 

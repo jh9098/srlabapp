@@ -54,3 +54,12 @@ class ContentCategory(str, Enum):
     MARKET_SUMMARY = "MARKET_SUMMARY"
     SHORTS = "SHORTS"
     NOTICE = "NOTICE"
+
+
+class NotificationDeliveryStatus(str, Enum):
+    PENDING = "pending"
+    SENDING = "sending"
+    SENT = "sent"
+    FAILED = "failed"
+    NO_TOKEN = "no_token"
+    SKIPPED = "skipped"

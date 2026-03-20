@@ -148,3 +148,83 @@ def test_admin_content_crud_and_public_visibility(client):
     public_hidden = client.get('/api/v1/contents', params={'category': 'SHORTS'})
     public_ids = [item['content_id'] for item in public_hidden.json()['data']['items']]
     assert content_id not in public_ids
+
+
+from sqlalchemy import select
+
+from app.models.device_token import DeviceToken
+from app.models.enums import NotificationDeliveryStatus
+from app.models.notification import Notification
+from app.services.notification_service import NotificationService
+from app.services.push_service import PushProvider, PushSendResult
+
+
+class FakeSuccessPushProvider(PushProvider):
+    def send(self, *, token: str, payload):
+        return PushSendResult(success=True, response_message_id=f"msg-{token}")
+
+
+class FakeInvalidPushProvider(PushProvider):
+    def send(self, *, token: str, payload):
+        return PushSendResult(
+            success=False,
+            failure_reason='UNREGISTERED',
+            should_deactivate_token=True,
+        )
+
+
+def test_device_token_deactivate_api(client, db_session):
+    register_response = client.post(
+        '/api/v1/me/device-tokens',
+        headers={'X-User-Identifier': 'demo-user'},
+        json={
+            'device_token': 'deactivate-token',
+            'platform': 'android',
+            'provider': 'fcm',
+        },
+    )
+    assert register_response.status_code == 200
+
+    deactivate_response = client.post(
+        '/api/v1/me/device-tokens/deactivate',
+        headers={'X-User-Identifier': 'demo-user'},
+        json={'device_token': 'deactivate-token'},
+    )
+    assert deactivate_response.status_code == 200
+    token = db_session.scalar(select(DeviceToken).where(DeviceToken.device_token == 'deactivate-token'))
+    assert token is not None
+    assert token.is_active is False
+
+
+def test_pending_notification_dispatch_marks_sent(db_session):
+    notification = db_session.scalar(select(Notification).where(Notification.user_identifier == 'demo-user'))
+    assert notification is not None
+    notification.delivery_status = NotificationDeliveryStatus.PENDING
+
+    service = NotificationService(
+        db_session,
+        push_service=None,
+    )
+    service.push_service.provider = FakeSuccessPushProvider()
+
+    summary = service.dispatch_pending(limit=10)
+
+    assert summary['processed'] >= 1
+    assert notification.delivery_status == NotificationDeliveryStatus.SENT
+    assert notification.response_message_id is not None
+
+
+def test_invalid_token_is_deactivated_when_dispatch_fails(db_session):
+    notification = db_session.scalar(select(Notification).where(Notification.user_identifier == 'demo-user'))
+    assert notification is not None
+    notification.delivery_status = NotificationDeliveryStatus.PENDING
+
+    service = NotificationService(db_session)
+    service.push_service.provider = FakeInvalidPushProvider()
+
+    service.dispatch_pending(limit=10, max_retry_count=1)
+
+    token = db_session.scalar(select(DeviceToken).where(DeviceToken.user_identifier == 'demo-user'))
+    assert token is not None
+    assert token.is_active is False
+    assert notification.delivery_status == NotificationDeliveryStatus.FAILED

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/navigation/app_navigator.dart';
 import '../../core/push/push_notification_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../home/presentation/home_screen.dart';
@@ -13,18 +14,28 @@ import '../watchlist/presentation/watchlist_screen.dart';
 import 'app_scope.dart';
 
 class SrLabApp extends StatelessWidget {
-  const SrLabApp({super.key, required this.config});
+  SrLabApp({super.key, required this.config});
 
   final AppConfig config;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   @override
   Widget build(BuildContext context) {
+    final appNavigator = AppNavigator(
+      navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
+    );
     return AppScope(
       config: config,
+      appNavigator: appNavigator,
       child: MaterialApp(
         title: '지지저항Lab',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
+        navigatorKey: _navigatorKey,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
         home: const AppShell(),
       ),
     );
@@ -73,12 +84,13 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    final appNavigator = AppScope.of(context).appNavigator;
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_index]),
         actions: [
           IconButton(
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+            onPressed: appNavigator.openNotifications,
             icon: const Icon(Icons.notifications_outlined),
           ),
         ],
@@ -88,7 +100,9 @@ class _AppShellState extends State<AppShell> {
           if (_pushBootstrapResult != null)
             MaterialBanner(
               content: Text(_pushBootstrapResult!.message),
-              backgroundColor: _pushBootstrapResult!.didRegisterToken ? Colors.green.shade50 : Colors.blueGrey.shade50,
+              backgroundColor: _pushBootstrapResult!.didRegisterToken
+                  ? Colors.green.shade50
+                  : Colors.blueGrey.shade50,
               actions: const [SizedBox.shrink()],
             ),
           Expanded(child: IndexedStack(index: _index, children: _screens)),
@@ -107,7 +121,9 @@ class _AppShellState extends State<AppShell> {
       ),
       floatingActionButton: _index == 1
           ? FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StockSearchScreen())),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StockSearchScreen()),
+              ),
               icon: const Icon(Icons.add_rounded),
               label: const Text('종목 추가'),
             )

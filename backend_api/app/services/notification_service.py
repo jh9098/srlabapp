@@ -1,14 +1,14 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.alert_setting import AlertSetting
-from app.models.enums import NotificationType
+from app.models.enums import NotificationDeliveryStatus, NotificationType
 from app.models.notification import Notification
 from app.models.signal_event import SignalEvent
 from app.models.watchlist import Watchlist
-from app.services.push_service import PushPayload, PushService
+from app.services.push_service import PushService
 
 
 class NotificationService:
@@ -54,7 +54,7 @@ class NotificationService:
         self,
         signal_event: SignalEvent,
         *,
-        dispatch_push: bool = True,
+        dispatch_push: bool = False,
     ) -> list[Notification]:
         if signal_event.stock_id is None:
             return []
@@ -77,19 +77,12 @@ class NotificationService:
                 title=signal_event.title,
                 message=signal_event.message,
                 target_path=f"/stocks/{signal_event.stock.code}" if signal_event.stock else None,
+                delivery_status=NotificationDeliveryStatus.PENDING,
             )
             self.db.add(notification)
             self.db.flush()
             if dispatch_push:
-                self.push_service.dispatch_to_user(
-                    user_identifier=user_id,
-                    payload=PushPayload(
-                        title=notification.title,
-                        message=notification.message,
-                        target_path=notification.target_path,
-                        notification_id=notification.id,
-                    ),
-                )
+                self.push_service.dispatch_notification(notification)
             created.append(notification)
         return created
 
@@ -100,6 +93,7 @@ class NotificationService:
         title: str,
         message: str,
         target_path: str | None = None,
+        dispatch_push: bool = False,
     ) -> Notification:
         notification = Notification(
             user_identifier=user_identifier,
@@ -107,16 +101,29 @@ class NotificationService:
             title=title,
             message=message,
             target_path=target_path,
+            delivery_status=NotificationDeliveryStatus.PENDING,
         )
         self.db.add(notification)
         self.db.flush()
-        self.push_service.dispatch_to_user(
-            user_identifier=user_identifier,
-            payload=PushPayload(
-                title=title,
-                message=message,
-                target_path=target_path,
-                notification_id=notification.id,
-            ),
-        )
+        if dispatch_push:
+            self.push_service.dispatch_notification(notification)
         return notification
+
+    def dispatch_pending(self, *, limit: int = 50, max_retry_count: int = 3) -> dict[str, int]:
+        return self.push_service.dispatch_pending_notifications(
+            limit=limit,
+            max_retry_count=max_retry_count,
+        )
+
+    def get_pending_for_dispatch(self, *, limit: int = 50) -> list[Notification]:
+        stmt = (
+            select(Notification)
+            .options(
+                selectinload(Notification.stock),
+                selectinload(Notification.signal_event),
+            )
+            .where(Notification.delivery_status == NotificationDeliveryStatus.PENDING)
+            .order_by(Notification.created_at.asc(), Notification.id.asc())
+            .limit(limit)
+        )
+        return list(self.db.scalars(stmt))

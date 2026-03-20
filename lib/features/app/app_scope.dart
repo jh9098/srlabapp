@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../../core/config/app_config.dart';
+import '../../core/navigation/app_navigator.dart';
 import '../../core/network/api_client.dart';
 import '../../core/push/push_notification_service.dart';
 import '../home/data/home_repository.dart';
@@ -15,6 +16,7 @@ class AppScope extends InheritedWidget {
     super.key,
     required super.child,
     required this.config,
+    required this.appNavigator,
   })  : apiClient = ApiClient(config: config),
         homeRepository = HomeRepository(ApiClient(config: config)),
         stockRepository = StockRepository(ApiClient(config: config)),
@@ -24,10 +26,12 @@ class AppScope extends InheritedWidget {
         pushNotificationService = PushNotificationService(
           config: config,
           apiClient: ApiClient(config: config),
+          appNavigator: appNavigator,
         ),
         watchlistController = WatchlistController(WatchlistRepository(ApiClient(config: config)));
 
   final AppConfig config;
+  final AppNavigator appNavigator;
   final ApiClient apiClient;
   final HomeRepository homeRepository;
   final StockRepository stockRepository;

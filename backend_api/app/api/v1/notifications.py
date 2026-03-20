@@ -35,6 +35,10 @@ def get_notifications(
                     title=item.title,
                     message=item.message,
                     target_path=item.target_path,
+                    delivery_status=item.delivery_status.value,
+                    response_message_id=item.response_message_id,
+                    failure_reason=item.failure_reason,
+                    retry_count=item.retry_count,
                     is_read=item.is_read,
                     created_at=item.created_at,
                 )
