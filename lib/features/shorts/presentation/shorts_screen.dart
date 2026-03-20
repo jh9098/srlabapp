@@ -16,15 +16,20 @@ class ShortsScreen extends StatefulWidget {
 
 class _ShortsScreenState extends State<ShortsScreen> {
   late Future<List<RecentContentModel>> _future;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     _future = _load();
   }
 
   Future<List<RecentContentModel>> _load() {
-    return AppScope.of(context).themeRepository.fetchContents(category: 'SHORTS', limit: 20);
+    return AppScope.of(context)
+        .themeRepository
+        .fetchContents(category: 'SHORTS', limit: 20);
   }
 
   Future<void> _reload() async {
@@ -43,7 +48,10 @@ class _ShortsScreenState extends State<ShortsScreen> {
           return const LoadingState();
         }
         if (snapshot.hasError) {
-          return ErrorState(message: '쇼츠/콘텐츠를 불러오지 못했습니다.\n${snapshot.error}', onRetry: _reload);
+          return ErrorState(
+            message: '쇼츠/콘텐츠를 불러오지 못했습니다.\n${snapshot.error}',
+            onRetry: _reload,
+          );
         }
         final items = snapshot.data ?? const <RecentContentModel>[];
         if (items.isEmpty) {
@@ -65,11 +73,17 @@ class _ShortsScreenState extends State<ShortsScreen> {
               final item = items[index];
               return Card(
                 child: ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.play_arrow_rounded)),
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.play_arrow_rounded),
+                  ),
                   title: Text(item.title),
                   subtitle: Text(item.summary ?? '요약이 없습니다.'),
-                  trailing: item.hasExternalLink ? const Icon(Icons.open_in_new_rounded) : null,
-                  onTap: !item.hasExternalLink ? null : () => launchUrl(Uri.parse(item.externalUrl!)),
+                  trailing: item.hasExternalLink
+                      ? const Icon(Icons.open_in_new_rounded)
+                      : null,
+                  onTap: !item.hasExternalLink
+                      ? null
+                      : () => launchUrl(Uri.parse(item.externalUrl!)),
                 ),
               );
             },

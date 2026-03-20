@@ -17,10 +17,13 @@ class ThemeScreen extends StatefulWidget {
 
 class _ThemeScreenState extends State<ThemeScreen> {
   late Future<List<ThemeItemModel>> _future;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     _future = _load();
   }
 
@@ -44,7 +47,10 @@ class _ThemeScreenState extends State<ThemeScreen> {
           return const LoadingState();
         }
         if (snapshot.hasError) {
-          return ErrorState(message: '테마 목록을 불러오지 못했습니다.\n${snapshot.error}', onRetry: _reload);
+          return ErrorState(
+            message: '테마 목록을 불러오지 못했습니다.\n${snapshot.error}',
+            onRetry: _reload,
+          );
         }
         final themes = snapshot.data ?? const <ThemeItemModel>[];
         if (themes.isEmpty) {
@@ -68,7 +74,10 @@ class _ThemeScreenState extends State<ThemeScreen> {
                   borderRadius: BorderRadius.circular(12),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => ThemeDetailScreen(themeId: theme.themeId, title: theme.name),
+                      builder: (_) => ThemeDetailScreen(
+                        themeId: theme.themeId,
+                        title: theme.name,
+                      ),
                     ),
                   ),
                   child: Padding(
@@ -81,10 +90,17 @@ class _ThemeScreenState extends State<ThemeScreen> {
                             Expanded(
                               child: Text(
                                 theme.name,
-                                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                             ),
-                            if (theme.score != null) Chip(label: Text('점수 ${theme.score!.toStringAsFixed(1)}')),
+                            if (theme.score != null)
+                              Chip(
+                                label:
+                                    Text('점수 ${theme.score!.toStringAsFixed(1)}'),
+                              ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -100,7 +116,10 @@ class _ThemeScreenState extends State<ThemeScreen> {
                                 label: Text('대장주 ${theme.leaderStock!.stockName}'),
                                 onPressed: () => Navigator.of(context).push(
                                   MaterialPageRoute(
-                                    builder: (_) => StockDetailScreen(stockCode: theme.leaderStock!.stockCode),
+                                    builder: (_) => StockDetailScreen(
+                                      stockCode:
+                                          theme.leaderStock!.stockCode,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -116,7 +135,11 @@ class _ThemeScreenState extends State<ThemeScreen> {
                                   (stock) => ActionChip(
                                     label: Text(stock.stockName),
                                     onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: stock.stockCode)),
+                                      MaterialPageRoute(
+                                        builder: (_) => StockDetailScreen(
+                                          stockCode: stock.stockCode,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 )
