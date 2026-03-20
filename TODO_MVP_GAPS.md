@@ -116,7 +116,7 @@
 지금 바로 검수하려면 아래만 보면 됩니다.
 
 1. `README.md`의 로컬 실행/검수 순서
-2. `backend_api/.env.example`의 관리자/FCM 설정값
+2. `backend_api/.env.example`의 관리자/FCM 설정값과 `python backend_api/scripts/check_release_readiness.py` 결과
 3. `admin_web` 로그인 후 관리자 데이터 확인
 4. Flutter 앱에서 홈/관심종목/상세/알림 확인
 

@@ -41,7 +41,7 @@
 
 ### 3-1. 공통 준비
 
-- [ ] backend `.env` 가 현재 검수 환경 값으로 설정되어 있다.
+- [ ] `backend_api/.env.example` 기준으로 로컬 `.env` 를 생성했고, 실제 `.env` 는 공유 산출물에 포함하지 않는다.
 - [ ] DB migration 이 최신까지 반영되어 있다.
 - [ ] seed 또는 검수용 데이터가 준비되어 있다.
 - [ ] Flutter 앱 실행에 필요한 `--dart-define` 값이 환경에 맞게 들어간다.
@@ -54,7 +54,8 @@
 아래 명령은 QA 시작 전에 한 번 실행한다.
 
 ```bash
-cd backend_api && pytest tests -q
+cd backend_api && python scripts/check_release_readiness.py
+cd backend_api && pytest -q
 cd /workspace/srlabapp && flutter test
 cd backend_api && python -m app.tasks.run_signal_monitor --dry-run
 cd backend_api && python -m app.tasks.run_notification_dispatcher --limit 20 --max-retry-count 3

@@ -11,6 +11,7 @@ pip install --no-build-isolation -e .
 cp .env.example .env
 alembic upgrade head
 python scripts/seed_minimum_data.py
+python scripts/check_release_readiness.py
 uvicorn app.main:app --reload
 ```
 
@@ -34,6 +35,10 @@ backend 설정은 `app/core/config.py` 의 `Settings` 에서 읽습니다.
 - `FCM_*`
 
 예시는 `backend_api/.env.example` 를 참고하세요.
+
+주의:
+- `backend_api/.env` 는 로컬 전용 파일입니다. 저장소 공유 산출물에는 포함하지 않습니다.
+- 협업/배포 문서 기준으로는 `.env.example` 만 유지합니다.
 
 ## Health Check
 
@@ -135,5 +140,6 @@ python -m app.tasks.run_notification_dispatcher --limit 50 --max-retry-count 3
 ## 테스트
 
 ```bash
-pytest tests -q
+pytest -q
+python scripts/check_release_readiness.py
 ```

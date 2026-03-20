@@ -64,6 +64,18 @@
 현재 저장소 안에는 아래가 포함됩니다.
 
 - 디바이스 토큰 등록 API
+- alembic revision uniqueness / single head / chain integrity
+
+로컬 릴리즈 가드:
+
+```bash
+cd backend_api
+python scripts/check_release_readiness.py
+```
+
+참고:
+- `backend_api/.env` 는 로컬 전용 파일이며 공유 산출물에 포함하지 않습니다.
+- 저장소에는 `backend_api/.env.example` 만 유지합니다.
 - 사용자/디바이스 토큰 저장 구조
 - `signal_events` → `notifications` 저장 연동
 - FCM 전송 provider
@@ -103,6 +115,7 @@ pip install --no-build-isolation -e .
 cp .env.example .env
 alembic upgrade head
 python scripts/seed_minimum_data.py
+python scripts/check_release_readiness.py
 uvicorn app.main:app --reload
 ```
 
@@ -139,15 +152,27 @@ FCM_ENABLED=false
 
 ```bash
 cd backend_api
-pytest tests -q
+pytest -q
 ```
 
-이 테스트는 아래 핵심 흐름을 검증합니다.
+이 테스트와 release guard는 아래 핵심 흐름을 검증합니다.
 
 - support state engine
 - home / stocks / watchlist / notifications API
 - 관리자 로그인 / 관리자 API
 - 디바이스 토큰 등록 API
+- alembic revision uniqueness / single head / chain integrity
+
+로컬 릴리즈 가드:
+
+```bash
+cd backend_api
+python scripts/check_release_readiness.py
+```
+
+참고:
+- `backend_api/.env` 는 로컬 전용 파일이며 공유 산출물에 포함하지 않습니다.
+- 저장소에는 `backend_api/.env.example` 만 유지합니다.
 
 ---
 
@@ -350,7 +375,7 @@ pip install --no-build-isolation -e .
 cp .env.example .env
 alembic upgrade head
 python scripts/seed_minimum_data.py
-pytest tests -q
+pytest -q
 uvicorn app.main:app --reload
 ```
 
