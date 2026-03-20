@@ -137,3 +137,22 @@
 따라서 이 TODO 문서 기준으로도 **Firestore read 비용과 관련된 잔여 작업은 없습니다.**
 
 즉, 이번 정리 이후에도 Firestore 읽기 소모 증가는 없습니다.
+
+## 8. 출시 직전 QA / 릴리즈 문서
+
+출시 판단과 운영 체크는 아래 문서를 함께 본다.
+
+- `docs/QA_CHECKLIST.md`
+- `docs/RELEASE_READINESS.md`
+- `docs/POST_LAUNCH_ROADMAP.md`
+- `docs/KNOWN_ISSUES.md`
+
+권장 사용 순서:
+1. QA 체크리스트 실행
+2. 릴리즈 readiness 판정
+3. known issues 확인
+4. 출시 후 로드맵 확인
+
+즉, 이 TODO 문서는 **남은 외부 설정/프로덕션 준비 항목 요약**으로 보고,
+출시 직전의 실제 판정은 위 4개 문서를 기준으로 진행합니다.
+
