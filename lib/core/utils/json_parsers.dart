@@ -26,6 +26,22 @@ DateTime? parseNullableJsonDate(dynamic value) {
   return DateTime(parsed.year, parsed.month, parsed.day);
 }
 
+String parseJsonString(dynamic value, {String fallback = ''}) {
+  if (value == null) {
+    return fallback;
+  }
+  final normalized = value.toString().trim();
+  return normalized.isEmpty ? fallback : normalized;
+}
+
+String? parseNullableJsonString(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+  final normalized = value.toString().trim();
+  return normalized.isEmpty ? null : normalized;
+}
+
 double parseJsonDouble(dynamic value, {double defaultValue = 0}) {
   if (value == null) {
     return defaultValue;

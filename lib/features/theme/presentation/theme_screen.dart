@@ -4,8 +4,9 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_state.dart';
 import '../../app/app_scope.dart';
-import '../../stock/presentation/stock_detail_screen.dart';
 import '../../home/data/home_models.dart';
+import '../../stock/presentation/stock_detail_screen.dart';
+import 'theme_detail_screen.dart';
 
 class ThemeScreen extends StatefulWidget {
   const ThemeScreen({super.key});
@@ -18,14 +19,18 @@ class _ThemeScreenState extends State<ThemeScreen> {
   late Future<List<ThemeItemModel>> _future;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _future = AppScope.of(context).themeRepository.fetchThemes();
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<List<ThemeItemModel>> _load() {
+    return AppScope.of(context).themeRepository.fetchThemes();
   }
 
   Future<void> _reload() async {
     setState(() {
-      _future = AppScope.of(context).themeRepository.fetchThemes();
+      _future = _load();
     });
     await _future;
   }
@@ -39,11 +44,16 @@ class _ThemeScreenState extends State<ThemeScreen> {
           return const LoadingState();
         }
         if (snapshot.hasError) {
-          return ErrorState(message: snapshot.error.toString(), onRetry: () { _reload(); });
+          return ErrorState(message: '테마 목록을 불러오지 못했습니다.\n${snapshot.error}', onRetry: _reload);
         }
-        final themes = snapshot.data!;
+        final themes = snapshot.data ?? const <ThemeItemModel>[];
         if (themes.isEmpty) {
-          return const EmptyState(title: '테마가 아직 없습니다', description: '운영자가 오늘의 테마를 등록하면 여기에 표시됩니다.');
+          return EmptyState(
+            title: '테마가 아직 없습니다',
+            description: '운영자가 오늘의 테마를 등록하면 여기에 표시됩니다.',
+            actionLabel: '다시 조회',
+            onAction: _reload,
+          );
         }
         return RefreshIndicator(
           onRefresh: _reload,
@@ -54,50 +64,67 @@ class _ThemeScreenState extends State<ThemeScreen> {
             itemBuilder: (context, index) {
               final theme = themes[index];
               return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(theme.name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                          ),
-                          if (theme.score != null) Chip(label: Text('점수 ${theme.score!.toStringAsFixed(1)}')),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(theme.summary ?? '테마 설명이 아직 없습니다.'),
-                      const SizedBox(height: 12),
-                      if (theme.leaderStock != null)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('대장주 · ${theme.leaderStock!.stockName}'),
-                          subtitle: Text(theme.leaderStock!.stockCode),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => StockDetailScreen(stockCode: theme.leaderStock!.stockCode),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ThemeDetailScreen(themeId: theme.themeId, title: theme.name),
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                theme.name,
+                                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                              ),
                             ),
-                          ),
+                            if (theme.score != null) Chip(label: Text('점수 ${theme.score!.toStringAsFixed(1)}')),
+                          ],
                         ),
-                      if (theme.followerStocks.isNotEmpty)
+                        const SizedBox(height: 8),
+                        Text(theme.summary ?? '테마 설명이 아직 없습니다.'),
+                        const SizedBox(height: 12),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: theme.followerStocks
-                              .map(
-                                (stock) => ActionChip(
-                                  label: Text(stock.stockName),
-                                  onPressed: () => Navigator.of(context).push(
-                                    MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: stock.stockCode)),
+                          children: [
+                            Chip(label: Text('연결 종목 ${theme.stockCount}개')),
+                            if (theme.leaderStock != null)
+                              ActionChip(
+                                label: Text('대장주 ${theme.leaderStock!.stockName}'),
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => StockDetailScreen(stockCode: theme.leaderStock!.stockCode),
                                   ),
                                 ),
-                              )
-                              .toList(),
+                              ),
+                          ],
                         ),
-                    ],
+                        if (theme.followerStocks.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: theme.followerStocks
+                                .map(
+                                  (stock) => ActionChip(
+                                    label: Text(stock.stockName),
+                                    onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: stock.stockCode)),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               );

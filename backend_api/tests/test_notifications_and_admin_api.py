@@ -103,3 +103,48 @@ def test_admin_force_update_and_manual_push_logs_audit(client):
     actions = [item['action'] for item in audit_response.json()['data']['items']]
     assert 'force_update_support_state' in actions
     assert 'manual_push' in actions
+
+
+
+def test_admin_content_crud_and_public_visibility(client):
+    headers = admin_auth_headers(client)
+    create_response = client.post(
+        '/api/v1/admin/contents',
+        headers=headers,
+        json={
+            'category': 'SHORTS',
+            'title': '새 쇼츠 카드',
+            'summary': '운영자가 등록한 최신 콘텐츠',
+            'external_url': 'https://example.com/shorts/new',
+            'sort_order': 0,
+            'is_published': True,
+        },
+    )
+    assert create_response.status_code == 200
+    content_id = create_response.json()['data']['id']
+
+    list_response = client.get('/api/v1/admin/contents', headers=headers)
+    assert list_response.status_code == 200
+    assert any(item['id'] == content_id for item in list_response.json()['data'])
+
+    public_response = client.get('/api/v1/contents', params={'category': 'SHORTS'})
+    assert public_response.status_code == 200
+    assert any(item['content_id'] == content_id for item in public_response.json()['data']['items'])
+
+    hide_response = client.put(
+        f'/api/v1/admin/contents/{content_id}',
+        headers=headers,
+        json={
+            'category': 'SHORTS',
+            'title': '새 쇼츠 카드',
+            'summary': '숨김 처리 테스트',
+            'external_url': 'https://example.com/shorts/new',
+            'sort_order': 0,
+            'is_published': False,
+        },
+    )
+    assert hide_response.status_code == 200
+
+    public_hidden = client.get('/api/v1/contents', params={'category': 'SHORTS'})
+    public_ids = [item['content_id'] for item in public_hidden.json()['data']['items']]
+    assert content_id not in public_ids

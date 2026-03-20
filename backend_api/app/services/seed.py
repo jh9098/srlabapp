@@ -132,8 +132,29 @@ def seed_minimum_data(db: Session) -> None:
         summary="지지선 부근 재테스트 구간",
         external_url="https://example.com/post/101",
         published_at=evaluated_at,
+        sort_order=1,
+        is_published=True,
     )
-    db.add(content)
+    shorts_content = ContentPost(
+        category=ContentCategory.SHORTS,
+        stock_id=sk.id,
+        theme_id=theme.id,
+        title="AI 반도체 1분 요약",
+        summary="오늘 강했던 핵심 종목만 빠르게 정리",
+        external_url="https://example.com/shorts/201",
+        published_at=evaluated_at,
+        sort_order=2,
+        is_published=True,
+    )
+    hidden_content = ContentPost(
+        category=ContentCategory.NOTICE,
+        title="비노출 점검용 콘텐츠",
+        summary="앱에는 보이면 안 됩니다.",
+        published_at=evaluated_at,
+        sort_order=99,
+        is_published=False,
+    )
+    db.add_all([content, shorts_content, hidden_content])
     db.flush()
 
     seed_signal_event = SignalEvent(

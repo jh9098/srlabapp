@@ -16,6 +16,7 @@ const elements = {
   loginPanel: document.getElementById('loginPanel'),
   dashboardPanel: document.getElementById('dashboardPanel'),
   dashboardStats: document.getElementById('dashboardStats'),
+  crudPanel: document.getElementById('crudPanel'),
   manualPushPanel: document.getElementById('manualPushPanel'),
   resourcesPanel: document.getElementById('resourcesPanel'),
   refreshButton: document.getElementById('refreshButton'),
@@ -26,12 +27,47 @@ const elements = {
   pushMessage: document.getElementById('pushMessage'),
   pushButton: document.getElementById('pushButton'),
   pushMessageStatus: document.getElementById('pushMessageStatus'),
+  stockId: document.getElementById('stockId'),
+  stockCode: document.getElementById('stockCode'),
+  stockName: document.getElementById('stockName'),
+  stockMarketType: document.getElementById('stockMarketType'),
+  stockSector: document.getElementById('stockSector'),
+  stockThemeTags: document.getElementById('stockThemeTags'),
+  stockMemo: document.getElementById('stockMemo'),
+  stockActive: document.getElementById('stockActive'),
+  saveStockButton: document.getElementById('saveStockButton'),
+  stockFormMessage: document.getElementById('stockFormMessage'),
+  featuredItems: document.getElementById('featuredItems'),
+  saveFeaturedButton: document.getElementById('saveFeaturedButton'),
+  featuredFormMessage: document.getElementById('featuredFormMessage'),
+  themeId: document.getElementById('themeId'),
+  themeName: document.getElementById('themeName'),
+  themeScore: document.getElementById('themeScore'),
+  themeSummary: document.getElementById('themeSummary'),
+  themeStocks: document.getElementById('themeStocks'),
+  themeActive: document.getElementById('themeActive'),
+  saveThemeButton: document.getElementById('saveThemeButton'),
+  themeFormMessage: document.getElementById('themeFormMessage'),
+  contentId: document.getElementById('contentId'),
+  contentCategory: document.getElementById('contentCategory'),
+  contentTitle: document.getElementById('contentTitle'),
+  contentSummary: document.getElementById('contentSummary'),
+  contentUrl: document.getElementById('contentUrl'),
+  contentThumbnailUrl: document.getElementById('contentThumbnailUrl'),
+  contentStockId: document.getElementById('contentStockId'),
+  contentThemeId: document.getElementById('contentThemeId'),
+  contentSortOrder: document.getElementById('contentSortOrder'),
+  contentPublishedAt: document.getElementById('contentPublishedAt'),
+  contentPublished: document.getElementById('contentPublished'),
+  saveContentButton: document.getElementById('saveContentButton'),
+  contentFormMessage: document.getElementById('contentFormMessage'),
   stocksOutput: document.getElementById('stocksOutput'),
   levelsOutput: document.getElementById('levelsOutput'),
   statesOutput: document.getElementById('statesOutput'),
   eventsOutput: document.getElementById('eventsOutput'),
   featuredOutput: document.getElementById('featuredOutput'),
   themesOutput: document.getElementById('themesOutput'),
+  contentsOutput: document.getElementById('contentsOutput'),
   logsOutput: document.getElementById('logsOutput'),
 };
 
@@ -56,6 +92,7 @@ function loadSession() {
 function setLoggedIn(isLoggedIn) {
   elements.loginPanel.hidden = isLoggedIn;
   elements.dashboardPanel.hidden = !isLoggedIn;
+  elements.crudPanel.hidden = !isLoggedIn;
   elements.manualPushPanel.hidden = !isLoggedIn;
   elements.resourcesPanel.hidden = !isLoggedIn;
   elements.logoutButton.hidden = !isLoggedIn;
@@ -88,6 +125,7 @@ function renderStats(sessionData, dashboard) {
     ['권한', sessionData.role],
     ['활성 종목 수', dashboard.stock_count],
     ['오늘 신호 수', dashboard.signal_event_count],
+    ['공개 콘텐츠 수', dashboard.content_count],
     ['INVALID 수', dashboard.invalid_count],
     ['REUSABLE 수', dashboard.reusable_count],
     ['수동 푸시 로그', dashboard.push_queue_count],
@@ -98,7 +136,7 @@ function renderStats(sessionData, dashboard) {
 }
 
 async function refreshAll() {
-  const [sessionRes, dashboardRes, stocksRes, levelsRes, statesRes, eventsRes, featuredRes, themesRes, logsRes] = await Promise.all([
+  const [sessionRes, dashboardRes, stocksRes, levelsRes, statesRes, eventsRes, featuredRes, themesRes, contentsRes, logsRes] = await Promise.all([
     apiRequest('/admin/auth/me'),
     apiRequest('/admin/dashboard'),
     apiRequest('/admin/stocks'),
@@ -107,6 +145,7 @@ async function refreshAll() {
     apiRequest('/admin/signal-events'),
     apiRequest('/admin/home-featured'),
     apiRequest('/admin/themes'),
+    apiRequest('/admin/contents'),
     apiRequest('/admin/audit-logs'),
   ]);
   renderStats(sessionRes.data, dashboardRes.data);
@@ -116,7 +155,20 @@ async function refreshAll() {
   renderJson(elements.eventsOutput, eventsRes.data);
   renderJson(elements.featuredOutput, featuredRes.data);
   renderJson(elements.themesOutput, themesRes.data);
+  renderJson(elements.contentsOutput, contentsRes.data);
   renderJson(elements.logsOutput, logsRes.data.items);
+}
+
+function parseBooleanText(value) {
+  return ['true', '1', 'y', 'yes'].includes(String(value).trim().toLowerCase());
+}
+
+function parseCsvLines(text, mapper) {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => mapper(line.split(',').map((item) => item.trim())));
 }
 
 async function login() {
@@ -137,6 +189,80 @@ async function login() {
   persistSession();
   setLoggedIn(true);
   elements.loginMessage.textContent = '로그인 성공. 관리자 데이터를 불러옵니다.';
+  await refreshAll();
+}
+
+async function saveStock() {
+  const stockId = elements.stockId.value.trim();
+  const payload = {
+    code: elements.stockCode.value.trim(),
+    name: elements.stockName.value.trim(),
+    market_type: elements.stockMarketType.value.trim() || 'OTHER',
+    sector: elements.stockSector.value.trim() || null,
+    theme_tags: elements.stockThemeTags.value.trim() || null,
+    operator_memo: elements.stockMemo.value.trim() || null,
+    is_active: elements.stockActive.checked,
+  };
+  const path = stockId ? `/admin/stocks/${stockId}` : '/admin/stocks';
+  const method = stockId ? 'PUT' : 'POST';
+  const response = await apiRequest(path, { method, body: JSON.stringify(payload) });
+  elements.stockFormMessage.textContent = response.message;
+  await refreshAll();
+}
+
+async function saveFeatured() {
+  const items = parseCsvLines(elements.featuredItems.value, ([stockId, displayOrder, isActive]) => ({
+    stock_id: Number(stockId),
+    display_order: Number(displayOrder || 0),
+    is_active: parseBooleanText(isActive ?? 'true'),
+  }));
+  const response = await apiRequest('/admin/home-featured', {
+    method: 'PUT',
+    body: JSON.stringify({ items }),
+  });
+  elements.featuredFormMessage.textContent = response.message;
+  await refreshAll();
+}
+
+async function saveTheme() {
+  const themeId = elements.themeId.value.trim();
+  const stocks = parseCsvLines(elements.themeStocks.value, ([stockId, roleType, score]) => ({
+    stock_id: Number(stockId),
+    role_type: roleType || 'FOLLOWER',
+    score: score ? Number(score) : null,
+  }));
+  const payload = {
+    name: elements.themeName.value.trim(),
+    score: elements.themeScore.value.trim() ? Number(elements.themeScore.value.trim()) : null,
+    summary: elements.themeSummary.value.trim() || null,
+    is_active: elements.themeActive.checked,
+    stocks,
+  };
+  const path = themeId ? `/admin/themes/${themeId}` : '/admin/themes';
+  const method = themeId ? 'PUT' : 'POST';
+  const response = await apiRequest(path, { method, body: JSON.stringify(payload) });
+  elements.themeFormMessage.textContent = response.message;
+  await refreshAll();
+}
+
+async function saveContent() {
+  const contentId = elements.contentId.value.trim();
+  const payload = {
+    category: elements.contentCategory.value.trim(),
+    title: elements.contentTitle.value.trim(),
+    summary: elements.contentSummary.value.trim() || null,
+    external_url: elements.contentUrl.value.trim() || null,
+    thumbnail_url: elements.contentThumbnailUrl.value.trim() || null,
+    stock_id: elements.contentStockId.value.trim() ? Number(elements.contentStockId.value.trim()) : null,
+    theme_id: elements.contentThemeId.value.trim() ? Number(elements.contentThemeId.value.trim()) : null,
+    sort_order: Number(elements.contentSortOrder.value.trim() || 0),
+    published_at: elements.contentPublishedAt.value.trim() || null,
+    is_published: elements.contentPublished.checked,
+  };
+  const path = contentId ? `/admin/contents/${contentId}` : '/admin/contents';
+  const method = contentId ? 'PUT' : 'POST';
+  const response = await apiRequest(path, { method, body: JSON.stringify(payload) });
+  elements.contentFormMessage.textContent = response.message;
   await refreshAll();
 }
 
@@ -181,6 +307,43 @@ elements.refreshButton.addEventListener('click', async () => {
     elements.loginMessage.textContent = error.message;
   }
 });
+
+elements.saveStockButton.addEventListener('click', async () => {
+  elements.stockFormMessage.textContent = '';
+  try {
+    await saveStock();
+  } catch (error) {
+    elements.stockFormMessage.textContent = error.message;
+  }
+});
+
+elements.saveFeaturedButton.addEventListener('click', async () => {
+  elements.featuredFormMessage.textContent = '';
+  try {
+    await saveFeatured();
+  } catch (error) {
+    elements.featuredFormMessage.textContent = error.message;
+  }
+});
+
+elements.saveThemeButton.addEventListener('click', async () => {
+  elements.themeFormMessage.textContent = '';
+  try {
+    await saveTheme();
+  } catch (error) {
+    elements.themeFormMessage.textContent = error.message;
+  }
+});
+
+elements.saveContentButton.addEventListener('click', async () => {
+  elements.contentFormMessage.textContent = '';
+  try {
+    await saveContent();
+  } catch (error) {
+    elements.contentFormMessage.textContent = error.message;
+  }
+});
+
 elements.pushButton.addEventListener('click', async () => {
   elements.pushMessageStatus.textContent = '';
   try {

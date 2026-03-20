@@ -71,6 +71,16 @@ class SimpleTestClient:
     ) -> SimpleResponse:
         return self.request("POST", url, params=params, headers=headers, json=json)
 
+    def put(
+        self,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        json: Any = None,
+    ) -> SimpleResponse:
+        return self.request("PUT", url, params=params, headers=headers, json=json)
+
     def patch(
         self,
         url: str,

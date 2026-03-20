@@ -5,7 +5,7 @@ from app.models.content_post import ContentPost
 from app.models.daily_bar import DailyBar
 from app.models.home_featured_stock import HomeFeaturedStock
 from app.models.price_level import PriceLevel
-from app.models.enums import SupportStatus
+from app.models.enums import ContentCategory, SupportStatus
 from app.models.signal_event import SignalEvent
 from app.models.stock import Stock
 from app.models.support_state import SupportState
@@ -37,7 +37,7 @@ class StockRepository:
                 joinedload(Stock.daily_bars),
                 joinedload(Stock.watchlists),
                 joinedload(Stock.theme_maps).joinedload(ThemeStockMap.theme),
-                joinedload(Stock.content_posts),
+                joinedload(Stock.content_posts).joinedload(ContentPost.theme),
             )
             .where(Stock.code == stock_code, Stock.is_active.is_(True))
         )
@@ -111,16 +111,29 @@ class StockRepository:
         )
         return list(self.db.execute(stmt).unique().scalars())
 
-    def list_recent_contents(self, limit: int = 4) -> list[ContentPost]:
+    def get_theme(self, theme_id: int) -> Theme | None:
+        stmt = (
+            select(Theme)
+            .options(
+                joinedload(Theme.stock_maps).joinedload(ThemeStockMap.stock),
+                joinedload(Theme.content_posts).joinedload(ContentPost.stock),
+            )
+            .where(Theme.id == theme_id, Theme.is_active.is_(True))
+        )
+        return self.db.execute(stmt).unique().scalar_one_or_none()
+
+    def list_recent_contents(self, limit: int = 4, *, category: ContentCategory | None = None) -> list[ContentPost]:
         stmt = (
             select(ContentPost)
             .options(
                 joinedload(ContentPost.stock),
                 joinedload(ContentPost.theme),
             )
-            .order_by(ContentPost.published_at.desc().nullslast(), ContentPost.id.desc())
-            .limit(limit)
+            .where(ContentPost.is_published.is_(True))
         )
+        if category is not None:
+            stmt = stmt.where(ContentPost.category == category)
+        stmt = stmt.order_by(ContentPost.sort_order.asc(), ContentPost.published_at.desc().nullslast(), ContentPost.id.desc()).limit(limit)
         return list(self.db.execute(stmt).unique().scalars())
 
     def count_watchlist_signal_summary(self, user_identifier: str | None) -> dict[str, int]:

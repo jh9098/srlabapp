@@ -1,11 +1,13 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.errors import AppError
 from app.models.admin_audit_log import AdminAuditLog
-from app.models.enums import MarketType, PriceLevelType, SupportStatus, ThemeRoleType
+from app.models.content_post import ContentPost
+from app.models.enums import ContentCategory, MarketType, PriceLevelType, SupportStatus, ThemeRoleType
 from app.models.home_featured_stock import HomeFeaturedStock
 from app.models.price_level import PriceLevel
 from app.models.signal_event import SignalEvent
@@ -27,7 +29,9 @@ class AdminService:
         today = datetime.now(timezone.utc).date()
         today_events = list(
             self.db.scalars(
-                select(SignalEvent).where(SignalEvent.event_time >= datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc))
+                select(SignalEvent).where(
+                    SignalEvent.event_time >= datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+                )
             )
         )
         return {
@@ -35,7 +39,10 @@ class AdminService:
             "signal_event_count": len(today_events),
             "invalid_count": len([e for e in today_events if e.status_to == SupportStatus.INVALID.value]),
             "reusable_count": len([e for e in today_events if e.status_to == SupportStatus.REUSABLE.value]),
-            "push_queue_count": len([e for e in self.db.scalars(select(AdminAuditLog).where(AdminAuditLog.action == "manual_push"))]),
+            "push_queue_count": len(
+                [e for e in self.db.scalars(select(AdminAuditLog).where(AdminAuditLog.action == "manual_push"))]
+            ),
+            "content_count": len(list(self.db.scalars(select(ContentPost).where(ContentPost.is_published.is_(True))))),
         }
 
     def list_stocks(self) -> list[Stock]:
@@ -53,7 +60,10 @@ class AdminService:
         stock.theme_tags = payload.theme_tags
         stock.operator_memo = payload.operator_memo
         stock.is_active = payload.is_active
-        self.db.flush()
+        try:
+            self.db.flush()
+        except IntegrityError as exc:
+            raise AppError(message="이미 등록된 종목코드입니다.", error_code="DUPLICATE_STOCK_CODE", status_code=400) from exc
         self.audit.log(
             actor_identifier=actor_identifier,
             action="upsert_stock",
@@ -91,7 +101,11 @@ class AdminService:
         return level
 
     def list_support_states(self) -> list[SupportState]:
-        stmt = select(SupportState).options(joinedload(SupportState.stock), joinedload(SupportState.price_level)).order_by(SupportState.updated_at.desc())
+        stmt = (
+            select(SupportState)
+            .options(joinedload(SupportState.stock), joinedload(SupportState.price_level))
+            .order_by(SupportState.updated_at.desc())
+        )
         return list(self.db.execute(stmt).unique().scalars())
 
     def force_update_support_state(self, *, state_id: int, payload, actor_identifier: str) -> SupportState:
@@ -141,7 +155,11 @@ class AdminService:
         return new_items
 
     def list_themes(self) -> list[Theme]:
-        stmt = select(Theme).options(joinedload(Theme.stock_maps).joinedload(ThemeStockMap.stock)).order_by(Theme.is_active.desc(), Theme.name.asc())
+        stmt = (
+            select(Theme)
+            .options(joinedload(Theme.stock_maps).joinedload(ThemeStockMap.stock))
+            .order_by(Theme.is_active.desc(), Theme.score.desc().nullslast(), Theme.name.asc())
+        )
         return list(self.db.execute(stmt).unique().scalars())
 
     def upsert_theme(self, *, theme_id: int | None, payload, actor_identifier: str) -> Theme:
@@ -170,9 +188,47 @@ class AdminService:
             action="upsert_theme",
             entity_type="theme",
             entity_id=str(theme.id),
-            detail={"name": theme.name, "stock_count": len(payload.stocks)},
+            detail={"name": theme.name, "stock_count": len(payload.stocks), "is_active": theme.is_active},
         )
         return theme
+
+    def list_contents(self) -> list[ContentPost]:
+        stmt = (
+            select(ContentPost)
+            .options(joinedload(ContentPost.stock), joinedload(ContentPost.theme))
+            .order_by(ContentPost.sort_order.asc(), ContentPost.published_at.desc().nullslast(), ContentPost.id.desc())
+        )
+        return list(self.db.execute(stmt).unique().scalars())
+
+    def upsert_content(self, *, content_id: int | None, payload, actor_identifier: str) -> ContentPost:
+        content = self.db.get(ContentPost, content_id) if content_id else None
+        if content is None:
+            content = ContentPost(category=ContentCategory(payload.category), title=payload.title)
+            self.db.add(content)
+        content.category = ContentCategory(payload.category)
+        content.title = payload.title
+        content.summary = payload.summary
+        content.external_url = payload.external_url
+        content.thumbnail_url = payload.thumbnail_url
+        content.stock_id = payload.stock_id
+        content.theme_id = payload.theme_id
+        content.sort_order = payload.sort_order
+        content.is_published = payload.is_published
+        content.published_at = payload.published_at or (datetime.now(timezone.utc) if payload.is_published else None)
+        self.db.flush()
+        self.audit.log(
+            actor_identifier=actor_identifier,
+            action="upsert_content",
+            entity_type="content_post",
+            entity_id=str(content.id),
+            detail={
+                "title": content.title,
+                "category": content.category.value,
+                "is_published": content.is_published,
+                "sort_order": content.sort_order,
+            },
+        )
+        return content
 
     def list_audit_logs(self, limit: int = 100) -> list[AdminAuditLog]:
         stmt = select(AdminAuditLog).order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).limit(limit)

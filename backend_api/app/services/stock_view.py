@@ -4,13 +4,15 @@ from decimal import Decimal, ROUND_HALF_UP
 from app.core.errors import AppError
 from app.models.content_post import ContentPost
 from app.models.daily_bar import DailyBar
-from app.models.enums import PriceLevelType, SignalType, SupportStatus, ThemeRoleType
+from app.models.enums import ContentCategory, PriceLevelType, SignalType, SupportStatus, ThemeRoleType
 from app.models.price_level import PriceLevel
 from app.models.stock import Stock
 from app.models.support_state import SupportState
+from app.models.theme import Theme
 from app.repositories.stocks import StockRepository
 from app.repositories.watchlists import WatchlistRepository
 from app.schemas.stocks import (
+    ContentListResponseData,
     ContentReference,
     DailyBarItem,
     HomeFeaturedStockItem,
@@ -30,6 +32,7 @@ from app.schemas.stocks import (
     StockSummary,
     StockWatchlistSummary,
     SupportStateSummary,
+    ThemeDetailResponseData,
     ThemeItem,
     ThemeReference,
     ThemeStockSummary,
@@ -223,20 +226,34 @@ class StockViewService:
             featured_stocks=[self._build_home_featured_stock(stock) for stock in featured_stocks],
             watchlist_signal_summary=WatchlistSignalSummary(**summary),
             themes=theme_items,
-            recent_contents=[
-                RecentContentItem(
-                    content_id=item.id,
-                    category=item.category.value,
-                    title=item.title,
-                    summary=item.summary,
-                    external_url=item.external_url,
-                )
-                for item in recent_contents
-            ],
+            recent_contents=[self._build_recent_content_item(item) for item in recent_contents],
         )
 
     def get_themes(self) -> ThemesResponseData:
         return ThemesResponseData(items=self._build_theme_items(self.stock_repository.list_themes(limit=20)))
+
+    def get_theme_detail(self, theme_id: int) -> ThemeDetailResponseData:
+        theme = self.stock_repository.get_theme(theme_id)
+        if theme is None:
+            raise AppError(message="테마를 찾을 수 없습니다.", error_code="THEME_NOT_FOUND", status_code=404)
+        theme_item = self._build_theme_items([theme])[0]
+        stocks = []
+        for stock_map in sorted(theme.stock_maps, key=lambda item: (0 if item.role_type == ThemeRoleType.LEADER else 1, -(item.score or 0))):
+            if stock_map.stock and stock_map.stock.is_active:
+                stocks.append(ThemeStockSummary(stock_code=stock_map.stock.code, stock_name=stock_map.stock.name))
+        recent_contents = [
+            self._build_content_reference(item)
+            for item in sorted(
+                [content for content in theme.content_posts if content.is_published],
+                key=lambda entry: (entry.sort_order, entry.published_at is None, entry.published_at),
+            )[:10]
+        ]
+        return ThemeDetailResponseData(theme=theme_item, stocks=stocks, recent_contents=recent_contents)
+
+    def get_contents(self, *, category: str | None = None, limit: int = 20) -> ContentListResponseData:
+        content_category = ContentCategory(category) if category else None
+        items = self.stock_repository.list_recent_contents(limit=limit, category=content_category)
+        return ContentListResponseData(items=[self._build_recent_content_item(item) for item in items])
 
     def _get_stock_or_raise(self, stock_code: str) -> Stock:
         stock = self.stock_repository.get_by_code(stock_code)
@@ -318,16 +335,8 @@ class StockViewService:
         return references
 
     def _build_related_contents(self, content_posts: Iterable[ContentPost]) -> list[ContentReference]:
-        return [
-            ContentReference(
-                content_id=item.id,
-                category=item.category.value,
-                title=item.title,
-                summary=item.summary,
-                external_url=item.external_url,
-            )
-            for item in sorted(content_posts, key=lambda entry: (entry.published_at is None, entry.published_at), reverse=True)[:5]
-        ]
+        items = [post for post in content_posts if post.is_published]
+        return [self._build_content_reference(item) for item in sorted(items, key=lambda entry: (entry.sort_order, entry.published_at is None, entry.published_at), reverse=False)[:5]]
 
     def _build_market_headline(self, featured_stocks: list[Stock]) -> str:
         if not featured_stocks:
@@ -359,15 +368,19 @@ class StockViewService:
             summary=primary_state.status_reason or SCENARIO_TEXT[primary_state.status][0],
         )
 
-    def _build_theme_items(self, themes) -> list[ThemeItem]:
+    def _build_theme_items(self, themes: Iterable[Theme]) -> list[ThemeItem]:
         items: list[ThemeItem] = []
         for theme in themes:
             leader = None
             followers: list[ThemeStockSummary] = []
+            stock_count = 0
             for stock_map in sorted(
                 theme.stock_maps,
                 key=lambda item: (0 if item.role_type == ThemeRoleType.LEADER else 1, -(item.score or 0)),
             ):
+                if not stock_map.stock or not stock_map.stock.is_active:
+                    continue
+                stock_count += 1
                 stock_summary = ThemeStockSummary(stock_code=stock_map.stock.code, stock_name=stock_map.stock.name)
                 if stock_map.role_type == ThemeRoleType.LEADER and leader is None:
                     leader = stock_summary
@@ -381,9 +394,32 @@ class StockViewService:
                     summary=theme.summary,
                     leader_stock=leader,
                     follower_stocks=followers[:5],
+                    stock_count=stock_count,
                 )
             )
         return items
+
+    def _build_content_reference(self, item: ContentPost) -> ContentReference:
+        return ContentReference(
+            content_id=item.id,
+            category=item.category.value,
+            title=item.title,
+            summary=item.summary,
+            external_url=item.external_url,
+            thumbnail_url=item.thumbnail_url,
+            published_at=item.published_at,
+        )
+
+    def _build_recent_content_item(self, item: ContentPost) -> RecentContentItem:
+        return RecentContentItem(
+            content_id=item.id,
+            category=item.category.value,
+            title=item.title,
+            summary=item.summary,
+            external_url=item.external_url,
+            thumbnail_url=item.thumbnail_url,
+            published_at=item.published_at,
+        )
 
     def _calculate_distance_pct(self, current_price: Decimal, level_price: Decimal) -> Decimal | None:
         if level_price == 0:

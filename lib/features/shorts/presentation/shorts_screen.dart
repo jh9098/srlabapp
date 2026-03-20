@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/error_state.dart';
+import '../../../core/widgets/loading_state.dart';
 import '../../app/app_scope.dart';
 import '../../home/data/home_models.dart';
 
@@ -13,45 +15,65 @@ class ShortsScreen extends StatefulWidget {
 }
 
 class _ShortsScreenState extends State<ShortsScreen> {
-  late Future<HomeResponseModel> _future;
+  late Future<List<RecentContentModel>> _future;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _future = AppScope.of(context).homeRepository.fetchHome();
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<List<RecentContentModel>> _load() {
+    return AppScope.of(context).themeRepository.fetchContents(category: 'SHORTS', limit: 20);
+  }
+
+  Future<void> _reload() async {
+    setState(() {
+      _future = _load();
+    });
+    await _future;
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<HomeResponseModel>(
+    return FutureBuilder<List<RecentContentModel>>(
       future: _future,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const LoadingState();
         }
-        final items = snapshot.data!.recentContents.where((item) => item.externalUrl != null).toList();
+        if (snapshot.hasError) {
+          return ErrorState(message: '쇼츠/콘텐츠를 불러오지 못했습니다.\n${snapshot.error}', onRetry: _reload);
+        }
+        final items = snapshot.data ?? const <RecentContentModel>[];
         if (items.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             title: '쇼츠 연결 준비 중',
-            description: 'MVP에서는 외부 콘텐츠 링크만 간단히 연결합니다.',
+            description: '관리자에서 쇼츠 또는 요약 콘텐츠를 등록하면 여기에 표시됩니다.',
             icon: Icons.play_circle_outline_rounded,
+            actionLabel: '다시 조회',
+            onAction: _reload,
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.all(16),
-          itemCount: items.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final item = items[index];
-            return Card(
-              child: ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.play_arrow_rounded)),
-                title: Text(item.title),
-                subtitle: Text(item.summary ?? '요약이 없습니다.'),
-                onTap: () => launchUrl(Uri.parse(item.externalUrl!)),
-              ),
-            );
-          },
+        return RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return Card(
+                child: ListTile(
+                  leading: const CircleAvatar(child: Icon(Icons.play_arrow_rounded)),
+                  title: Text(item.title),
+                  subtitle: Text(item.summary ?? '요약이 없습니다.'),
+                  trailing: item.hasExternalLink ? const Icon(Icons.open_in_new_rounded) : null,
+                  onTap: !item.hasExternalLink ? null : () => launchUrl(Uri.parse(item.externalUrl!)),
+                ),
+              );
+            },
+          ),
         );
       },
     );
