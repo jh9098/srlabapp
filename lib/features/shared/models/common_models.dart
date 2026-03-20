@@ -11,9 +11,9 @@ class StatusBadgeModel {
 
   factory StatusBadgeModel.fromJson(Map<String, dynamic> json) {
     return StatusBadgeModel(
-      code: json['code'] as String,
-      label: json['label'] as String,
-      severity: json['severity'] as String,
+      code: json['code'] as String? ?? 'UNKNOWN',
+      label: json['label'] as String? ?? '상태 없음',
+      severity: json['severity'] as String? ?? 'neutral',
     );
   }
 }
@@ -31,9 +31,9 @@ class StockSummaryModel {
 
   factory StockSummaryModel.fromJson(Map<String, dynamic> json) {
     return StockSummaryModel(
-      stockCode: json['stock_code'] as String,
-      stockName: json['stock_name'] as String,
-      marketType: json['market_type'] as String,
+      stockCode: json['stock_code'] as String? ?? '',
+      stockName: json['stock_name'] as String? ?? '',
+      marketType: json['market_type'] as String? ?? '',
     );
   }
 }
@@ -49,8 +49,8 @@ class ThemeStockSummaryModel {
 
   factory ThemeStockSummaryModel.fromJson(Map<String, dynamic> json) {
     return ThemeStockSummaryModel(
-      stockCode: json['stock_code'] as String,
-      stockName: json['stock_name'] as String,
+      stockCode: json['stock_code'] as String? ?? '',
+      stockName: json['stock_name'] as String? ?? '',
     );
   }
 }
