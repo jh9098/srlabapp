@@ -270,6 +270,12 @@ class StockViewService:
             )
         return sorted(stock.daily_bars, key=lambda item: item.trade_date, reverse=True)[0]
 
+
+    def _get_latest_bar_or_none(self, stock: Stock) -> DailyBar | None:
+        if not stock.daily_bars:
+            return None
+        return sorted(stock.daily_bars, key=lambda item: item.trade_date, reverse=True)[0]
+
     def _select_primary_support_state(self, support_states: Iterable[SupportState]) -> SupportState:
         active_states = sorted(
             support_states,
@@ -282,6 +288,17 @@ class StockViewService:
                 error_code="SUPPORT_STATE_NOT_READY",
                 status_code=503,
             )
+        return active_states[0]
+
+
+    def _select_primary_support_state_or_none(self, support_states: Iterable[SupportState]) -> SupportState | None:
+        active_states = sorted(
+            support_states,
+            key=lambda item: (item.last_evaluated_at is None, item.last_evaluated_at),
+            reverse=True,
+        )
+        if not active_states:
+            return None
         return active_states[0]
 
     def _build_status_badge(self, support_status: SupportStatus) -> StatusBadge:
@@ -345,7 +362,9 @@ class StockViewService:
         negative = 0
         sectors: list[str] = []
         for stock in featured_stocks:
-            latest_bar = self._get_latest_bar(stock)
+            latest_bar = self._get_latest_bar_or_none(stock)
+            if latest_bar is None:
+                continue
             if latest_bar.change_pct >= 0:
                 positive += 1
             else:
@@ -357,15 +376,21 @@ class StockViewService:
         return f"{mood}, {sector_text} 중심 관찰이 필요한 장세"
 
     def _build_home_featured_stock(self, stock: Stock) -> HomeFeaturedStockItem:
-        latest_bar = self._get_latest_bar(stock)
-        primary_state = self._select_primary_support_state(stock.support_states)
+        latest_bar = self._get_latest_bar_or_none(stock)
+        primary_state = self._select_primary_support_state_or_none(stock.support_states)
+        status = self._build_status_badge(primary_state.status if primary_state else SupportStatus.WAITING)
+        summary = (
+            primary_state.status_reason
+            if primary_state and primary_state.status_reason
+            else ('지지선 상태 자동 계산 대기 중입니다.' if primary_state is None else SCENARIO_TEXT[primary_state.status][0])
+        )
         return HomeFeaturedStockItem(
             stock_code=stock.code,
             stock_name=stock.name,
-            current_price=latest_bar.close_price,
-            change_pct=latest_bar.change_pct,
-            status=self._build_status_badge(primary_state.status),
-            summary=primary_state.status_reason or SCENARIO_TEXT[primary_state.status][0],
+            current_price=latest_bar.close_price if latest_bar else Decimal('0'),
+            change_pct=latest_bar.change_pct if latest_bar else Decimal('0'),
+            status=status,
+            summary=summary,
         )
 
     def _build_theme_items(self, themes: Iterable[Theme]) -> list[ThemeItem]:

@@ -228,3 +228,28 @@ def test_invalid_token_is_deactivated_when_dispatch_fails(db_session):
     assert token is not None
     assert token.is_active is False
     assert notification.delivery_status == NotificationDeliveryStatus.FAILED
+
+
+def test_admin_filters_for_stocks_levels_and_states(client):
+    headers = admin_auth_headers(client)
+
+    stocks_response = client.get('/api/v1/admin/stocks', headers=headers, params={'q': '삼성'})
+    assert stocks_response.status_code == 200
+    stock_items = stocks_response.json()['data']
+    assert stock_items
+    assert all('삼성' in item['name'] or '삼성' in item['code'] for item in stock_items)
+
+    stock_id = stock_items[0]['id']
+    levels_response = client.get('/api/v1/admin/price-levels', headers=headers, params={'stock_id': stock_id, 'level_type': 'SUPPORT'})
+    assert levels_response.status_code == 200
+    level_items = levels_response.json()['data']
+    assert level_items
+    assert all(item['stock_id'] == stock_id for item in level_items)
+    assert all(item['level_type'] == 'SUPPORT' for item in level_items)
+
+    states_response = client.get('/api/v1/admin/support-states', headers=headers, params={'status': 'TESTING_SUPPORT', 'q': '삼성'})
+    assert states_response.status_code == 200
+    state_items = states_response.json()['data']
+    assert state_items
+    assert all(item['status'] == 'TESTING_SUPPORT' for item in state_items)
+    assert all('삼성' in item['stock_name'] or '삼성' in item['stock_code'] for item in state_items)

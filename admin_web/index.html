@@ -11,9 +11,12 @@
     <div class="page">
       <header class="page-header">
         <div>
-          <p class="eyebrow">MVP Admin / Environment Aware</p>
+          <p class="eyebrow">MVP Admin / Operator Workflow</p>
           <h1>지지저항Lab 관리자</h1>
-          <p class="subtext">종목, 홈 추천, 테마, 콘텐츠를 입력하고 앱 반영 여부를 바로 확인합니다.</p>
+          <p class="subtext">
+            운영 종목 검색, 지지/저항 관리, 지지선 상태 검수, 홈/테마/콘텐츠 연결을
+            운영자 흐름에 맞춰 한 화면에서 처리합니다.
+          </p>
         </div>
         <button id="logoutButton" class="ghost-button" hidden>로그아웃</button>
       </header>
@@ -24,12 +27,10 @@
           <label>
             <span>API Base URL</span>
             <input id="apiBaseUrl" value="http://127.0.0.1:8000/api/v1" />
-            <small>dev / staging / prod 별 API URL을 분리해 입력하거나 <code>assets/env.js</code> 로 기본값을 줄 수 있습니다.</small>
           </label>
           <label>
             <span>관리자 아이디</span>
             <input id="adminUsername" value="admin" />
-            <small>운영 비밀번호는 저장하지 않습니다. 관리자 계정은 backend 환경변수로 관리합니다.</small>
           </label>
           <label>
             <span>비밀번호</span>
@@ -41,70 +42,220 @@
       </section>
 
       <section class="panel" id="dashboardPanel" hidden>
-        <h2>세션 / 대시보드</h2>
+        <div class="section-title-row">
+          <div>
+            <h2>세션 / 대시보드</h2>
+            <p class="muted">운영자 세션과 오늘 운영 지표를 요약합니다.</p>
+          </div>
+          <button id="refreshButton" class="ghost-button">전체 새로고침</button>
+        </div>
         <div class="grid stats" id="dashboardStats"></div>
       </section>
 
-      <section class="panel" id="crudPanel" hidden>
+      <section class="panel" id="workspacePanel" hidden>
         <div class="section-title-row">
-          <h2>운영 입력</h2>
-          <button id="refreshButton" class="ghost-button">전체 새로고침</button>
+          <div>
+            <h2>운영 워크스페이스</h2>
+            <p class="muted">운영 관심종목 기준으로 검색하고, 연결과 상태 수정은 선택형 UI로 처리합니다.</p>
+          </div>
         </div>
-        <div class="grid two-column">
-          <article class="form-card">
-            <h3>종목 저장</h3>
-            <label><span>수정 ID (없으면 신규)</span><input id="stockId" placeholder="예: 1" /></label>
-            <label><span>종목코드</span><input id="stockCode" placeholder="005930" /></label>
-            <label><span>종목명</span><input id="stockName" placeholder="삼성전자" /></label>
-            <label><span>시장</span><input id="stockMarketType" value="KOSPI" /></label>
-            <label><span>섹터</span><input id="stockSector" placeholder="반도체" /></label>
-            <label><span>테마 태그</span><input id="stockThemeTags" placeholder="AI반도체,메모리" /></label>
-            <label><span>운영 메모</span><textarea id="stockMemo"></textarea></label>
-            <label class="checkbox"><input type="checkbox" id="stockActive" checked /> <span>앱 노출/활성</span></label>
-            <button id="saveStockButton">종목 저장</button>
-            <p id="stockFormMessage" class="message"></p>
-          </article>
 
-          <article class="form-card">
-            <h3>홈 추천 저장</h3>
+        <nav class="tab-nav" id="tabNav">
+          <button class="tab-button active" data-tab="stocksTab">탭 A. 운영 종목</button>
+          <button class="tab-button" data-tab="levelsTab">탭 B. 지지/저항 관리</button>
+          <button class="tab-button" data-tab="statesTab">탭 C. 지지선 상태 관리</button>
+          <button class="tab-button" data-tab="relationsTab">탭 D. 홈/테마/콘텐츠</button>
+        </nav>
+
+        <div class="tab-panel active" id="stocksTab">
+          <div class="grid two-column">
+            <article class="form-card">
+              <div class="section-title-row compact">
+                <h3>운영 종목 검색</h3>
+                <button id="stockCreateNewButton" class="ghost-button small">신규 종목</button>
+              </div>
+              <label>
+                <span>종목코드 또는 종목명</span>
+                <input id="stockSearchInput" placeholder="예: 005930 또는 삼성" />
+              </label>
+              <div id="stockSearchResults" class="selection-list"></div>
+            </article>
+
+            <article class="form-card">
+              <h3>선택 종목 상세</h3>
+              <div id="selectedStockSummary" class="info-card empty-inline">종목을 선택하면 상세 정보가 표시됩니다.</div>
+              <div class="grid two-column dense">
+                <label><span>종목코드</span><input id="stockCode" placeholder="005930" /></label>
+                <label><span>종목명</span><input id="stockName" placeholder="삼성전자" /></label>
+                <label><span>시장</span><input id="stockMarketType" value="KOSPI" /></label>
+                <label><span>섹터</span><input id="stockSector" placeholder="반도체" /></label>
+                <label class="full"><span>테마 태그</span><input id="stockThemeTags" placeholder="AI반도체, 메모리" /></label>
+                <label class="full"><span>운영 메모</span><textarea id="stockMemo"></textarea></label>
+                <label class="checkbox full"><input type="checkbox" id="stockActive" checked /> <span>운영 종목으로 활성 / 앱 노출 허용</span></label>
+              </div>
+              <div class="button-row">
+                <button id="saveStockButton">종목 저장</button>
+                <button id="resetStockButton" class="ghost-button">입력 초기화</button>
+              </div>
+              <p id="stockFormMessage" class="message"></p>
+            </article>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="levelsTab">
+          <div class="grid two-column">
+            <article class="form-card">
+              <h3>종목 선택</h3>
+              <label>
+                <span>종목코드 또는 종목명</span>
+                <input id="levelStockSearchInput" placeholder="지지/저항을 관리할 종목 검색" />
+              </label>
+              <div id="levelStockSearchResults" class="selection-list"></div>
+              <div id="levelStockSummary" class="info-card empty-inline">종목을 선택하면 해당 종목의 지지/저항 레벨을 보여줍니다.</div>
+            </article>
+
+            <article class="form-card">
+              <h3>지지/저항 추가</h3>
+              <div class="grid two-column dense">
+                <label>
+                  <span>레벨 유형</span>
+                  <select id="priceLevelType">
+                    <option value="SUPPORT">지지선</option>
+                    <option value="RESISTANCE">저항선</option>
+                  </select>
+                </label>
+                <label><span>가격</span><input id="priceLevelPrice" placeholder="65200" /></label>
+                <label><span>근접 기준(%)</span><input id="priceLevelProximity" value="1.50" /></label>
+                <label><span>반등 기준(%)</span><input id="priceLevelRebound" value="5.00" /></label>
+                <label>
+                  <span>입력 출처</span>
+                  <select id="priceLevelSource">
+                    <option value="operator">operator</option>
+                    <option value="Firebase">Firebase</option>
+                  </select>
+                </label>
+                <label><span>메모</span><input id="priceLevelNote" placeholder="운영자 수동 입력 메모" /></label>
+              </div>
+              <button id="savePriceLevelButton">레벨 추가</button>
+              <p id="priceLevelMessage" class="message"></p>
+            </article>
+          </div>
+
+          <div class="grid two-column split-levels">
+            <article class="form-card">
+              <h3>지지선 목록</h3>
+              <div id="supportLevelsList" class="stack-list"></div>
+            </article>
+            <article class="form-card">
+              <h3>저항선 목록</h3>
+              <div id="resistanceLevelsList" class="stack-list"></div>
+            </article>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="statesTab">
+          <div class="grid three-column">
             <label>
-              <span>추천 항목 (한 줄에 stock_id,display_order,is_active)</span>
-              <textarea id="featuredItems">1,1,true
-2,2,true</textarea>
+              <span>상태 필터</span>
+              <select id="stateStatusFilter">
+                <option value="ALL">전체</option>
+                <option value="WAITING">WAITING</option>
+                <option value="TESTING_SUPPORT">TESTING_SUPPORT</option>
+                <option value="DIRECT_REBOUND_SUCCESS">DIRECT_REBOUND_SUCCESS</option>
+                <option value="BREAK_REBOUND_SUCCESS">BREAK_REBOUND_SUCCESS</option>
+                <option value="REUSABLE">REUSABLE</option>
+                <option value="INVALID">INVALID</option>
+              </select>
             </label>
-            <button id="saveFeaturedButton">홈 추천 저장</button>
-            <p id="featuredFormMessage" class="message"></p>
-          </article>
-
-          <article class="form-card">
-            <h3>테마 저장</h3>
-            <label><span>수정 ID (없으면 신규)</span><input id="themeId" placeholder="예: 1" /></label>
-            <label><span>테마명</span><input id="themeName" placeholder="AI 반도체" /></label>
-            <label><span>점수</span><input id="themeScore" placeholder="87" /></label>
-            <label><span>요약</span><textarea id="themeSummary"></textarea></label>
             <label>
-              <span>연결 종목 (한 줄에 stock_id,role_type,score)</span>
-              <textarea id="themeStocks">2,LEADER,95
-1,FOLLOWER,80</textarea>
+              <span>종목 검색</span>
+              <input id="stateSearchInput" placeholder="종목코드 / 종목명 검색" />
             </label>
-            <label class="checkbox"><input type="checkbox" id="themeActive" checked /> <span>앱 노출/활성</span></label>
-            <button id="saveThemeButton">테마 저장</button>
-            <p id="themeFormMessage" class="message"></p>
-          </article>
+            <div class="hint-card">
+              <strong>운영 흐름 안내</strong>
+              <p>지지선 상태는 자동 생성 후 필요 시 강제 수정합니다. 강제 수정 시 반드시 메모를 남겨 감사 로그를 추적합니다.</p>
+            </div>
+          </div>
+          <div id="supportStatesTable" class="table-card"></div>
+        </div>
 
-          <article class="form-card">
-            <h3>콘텐츠 저장</h3>
-            <label><span>수정 ID (없으면 신규)</span><input id="contentId" placeholder="예: 1" /></label>
-            <label><span>카테고리</span><input id="contentCategory" value="SHORTS" /></label>
-            <label><span>제목</span><input id="contentTitle" placeholder="AI 반도체 1분 요약" /></label>
-            <label><span>요약</span><textarea id="contentSummary"></textarea></label>
-            <label><span>외부 링크</span><input id="contentUrl" placeholder="https://example.com/shorts/301" /></label>
-            <label><span>썸네일 URL</span><input id="contentThumbnailUrl" placeholder="https://..." /></label>
-            <label><span>관련 종목 ID</span><input id="contentStockId" placeholder="1" /></label>
-            <label><span>관련 테마 ID</span><input id="contentThemeId" placeholder="1" /></label>
-            <label><span>정렬 순서</span><input id="contentSortOrder" value="0" /></label>
-            <label><span>게시 시각 ISO8601 (비우면 현재시각)</span><input id="contentPublishedAt" placeholder="2026-03-20T12:00:00+09:00" /></label>
-            <label class="checkbox"><input type="checkbox" id="contentPublished" checked /> <span>앱 노출/게시</span></label>
+        <div class="tab-panel" id="relationsTab">
+          <div class="grid two-column">
+            <article class="form-card">
+              <div class="section-title-row compact">
+                <h3>홈 추천 구성</h3>
+                <span class="muted small">raw stock_id 입력 제거</span>
+              </div>
+              <label>
+                <span>추천 종목 검색</span>
+                <input id="featuredSearchInput" placeholder="종목코드 / 종목명으로 추가" />
+              </label>
+              <div id="featuredSearchResults" class="selection-list"></div>
+              <div id="featuredItemsList" class="stack-list"></div>
+              <button id="saveFeaturedButton">홈 추천 저장</button>
+              <p id="featuredFormMessage" class="message"></p>
+            </article>
+
+            <article class="form-card">
+              <div class="section-title-row compact">
+                <h3>테마 저장</h3>
+                <button id="themeCreateNewButton" class="ghost-button small">신규 테마</button>
+              </div>
+              <label><span>기존 테마 선택</span><select id="themeSelect"></select></label>
+              <div class="grid two-column dense">
+                <label><span>테마명</span><input id="themeName" placeholder="AI 반도체" /></label>
+                <label><span>점수</span><input id="themeScore" placeholder="87" /></label>
+                <label class="full"><span>요약</span><textarea id="themeSummary"></textarea></label>
+                <label class="checkbox full"><input type="checkbox" id="themeActive" checked /> <span>앱 노출/활성</span></label>
+              </div>
+              <label>
+                <span>연결 종목 검색</span>
+                <input id="themeStockSearchInput" placeholder="종목 검색 후 추가" />
+              </label>
+              <div id="themeStockSearchResults" class="selection-list"></div>
+              <div id="themeStockList" class="stack-list"></div>
+              <button id="saveThemeButton">테마 저장</button>
+              <p id="themeFormMessage" class="message"></p>
+            </article>
+          </div>
+
+          <article class="form-card top-gap">
+            <div class="section-title-row compact">
+              <h3>콘텐츠 저장</h3>
+              <button id="contentCreateNewButton" class="ghost-button small">신규 콘텐츠</button>
+            </div>
+            <div class="grid two-column">
+              <label><span>기존 콘텐츠 선택</span><select id="contentSelect"></select></label>
+              <label>
+                <span>카테고리</span>
+                <select id="contentCategory">
+                  <option value="SHORTS">SHORTS</option>
+                  <option value="STOCK_ANALYSIS">STOCK_ANALYSIS</option>
+                  <option value="THEME_BRIEF">THEME_BRIEF</option>
+                  <option value="MARKET_SUMMARY">MARKET_SUMMARY</option>
+                  <option value="NOTICE">NOTICE</option>
+                </select>
+              </label>
+              <label class="full"><span>제목</span><input id="contentTitle" placeholder="AI 반도체 1분 요약" /></label>
+              <label class="full"><span>요약</span><textarea id="contentSummary"></textarea></label>
+              <label><span>외부 링크</span><input id="contentUrl" placeholder="https://example.com/shorts/301" /></label>
+              <label><span>썸네일 URL</span><input id="contentThumbnailUrl" placeholder="https://..." /></label>
+              <label><span>정렬 순서</span><input id="contentSortOrder" value="0" /></label>
+              <label><span>게시 시각 ISO8601</span><input id="contentPublishedAt" placeholder="2026-03-20T12:00:00+09:00" /></label>
+              <label class="checkbox full"><input type="checkbox" id="contentPublished" checked /> <span>앱 노출/게시</span></label>
+            </div>
+            <div class="grid two-column">
+              <div>
+                <label><span>관련 종목 검색</span><input id="contentStockSearchInput" placeholder="종목 검색 후 선택" /></label>
+                <div id="contentStockSearchResults" class="selection-list"></div>
+                <div id="contentStockSummary" class="info-card empty-inline">선택된 종목 없음</div>
+              </div>
+              <div>
+                <label><span>관련 테마 선택</span><input id="contentThemeSearchInput" placeholder="테마명 검색 후 선택" /></label>
+                <div id="contentThemeSearchResults" class="selection-list"></div>
+                <div id="contentThemeSummary" class="info-card empty-inline">선택된 테마 없음</div>
+              </div>
+            </div>
             <button id="saveContentButton">콘텐츠 저장</button>
             <p id="contentFormMessage" class="message"></p>
           </article>
@@ -123,22 +274,37 @@
         <button id="pushButton">수동 푸시 저장/전송 시도</button>
         <p id="pushMessageStatus" class="message"></p>
       </section>
-
-      <section class="panel" id="resourcesPanel" hidden>
-        <h2>운영 데이터 확인</h2>
-        <div class="resource-grid">
-          <article class="wide"><h3>종목</h3><pre id="stocksOutput"></pre></article>
-          <article><h3>홈 노출</h3><pre id="featuredOutput"></pre></article>
-          <article><h3>테마</h3><pre id="themesOutput"></pre></article>
-          <article class="wide"><h3>콘텐츠</h3><pre id="contentsOutput"></pre></article>
-          <article><h3>가격 레벨</h3><pre id="levelsOutput"></pre></article>
-          <article><h3>지지 상태</h3><pre id="statesOutput"></pre></article>
-          <article><h3>신호 이벤트</h3><pre id="eventsOutput"></pre></article>
-          <article class="wide"><h3>감사 로그</h3><pre id="logsOutput"></pre></article>
-        </div>
-      </section>
     </div>
 
-    <script src="./assets/app.js" defer></script>
+    <div id="stateForceModal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="section-title-row compact">
+          <h3>지지선 상태 강제 수정</h3>
+          <button id="closeStateModalButton" class="ghost-button small">닫기</button>
+        </div>
+        <p id="stateForceTarget" class="muted"></p>
+        <label>
+          <span>변경 상태</span>
+          <select id="stateForceStatus">
+            <option value="WAITING">WAITING</option>
+            <option value="TESTING_SUPPORT">TESTING_SUPPORT</option>
+            <option value="DIRECT_REBOUND_SUCCESS">DIRECT_REBOUND_SUCCESS</option>
+            <option value="BREAK_REBOUND_SUCCESS">BREAK_REBOUND_SUCCESS</option>
+            <option value="REUSABLE">REUSABLE</option>
+            <option value="INVALID">INVALID</option>
+          </select>
+        </label>
+        <label><span>운영 메모</span><textarea id="stateForceMemo"></textarea></label>
+        <label><span>상태 사유</span><textarea id="stateForceReason"></textarea></label>
+        <label><span>무효 사유(선택)</span><textarea id="stateForceInvalidReason"></textarea></label>
+        <div class="button-row">
+          <button id="submitStateForceButton">강제 수정 저장</button>
+          <button id="cancelStateForceButton" class="ghost-button">취소</button>
+        </div>
+        <p id="stateForceMessage" class="message"></p>
+      </div>
+    </div>
+
+    <script type="module" src="./assets/app.js"></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -45,8 +45,14 @@ class AdminService:
             "content_count": len(list(self.db.scalars(select(ContentPost).where(ContentPost.is_published.is_(True))))),
         }
 
-    def list_stocks(self) -> list[Stock]:
-        return list(self.db.scalars(select(Stock).order_by(Stock.is_active.desc(), Stock.name.asc())))
+    def list_stocks(self, *, query: str | None = None) -> list[Stock]:
+        stmt = select(Stock)
+        if query:
+            normalized = query.strip()
+            if normalized:
+                stmt = stmt.where(or_(Stock.name.ilike(f"%{normalized}%"), Stock.code.ilike(f"%{normalized}%")))
+        stmt = stmt.order_by(Stock.is_active.desc(), Stock.name.asc())
+        return list(self.db.scalars(stmt))
 
     def upsert_stock(self, *, stock_id: int | None, payload, actor_identifier: str) -> Stock:
         stock = self.db.get(Stock, stock_id) if stock_id else None
@@ -73,8 +79,25 @@ class AdminService:
         )
         return stock
 
-    def list_price_levels(self) -> list[PriceLevel]:
-        stmt = select(PriceLevel).options(joinedload(PriceLevel.stock)).order_by(PriceLevel.stock_id.asc(), PriceLevel.price.asc())
+    def list_price_levels(
+        self,
+        *,
+        stock_id: int | None = None,
+        query: str | None = None,
+        level_type: str | None = None,
+    ) -> list[PriceLevel]:
+        stmt = select(PriceLevel).options(joinedload(PriceLevel.stock))
+        if stock_id is not None:
+            stmt = stmt.where(PriceLevel.stock_id == stock_id)
+        if level_type:
+            stmt = stmt.where(PriceLevel.level_type == PriceLevelType(level_type))
+        if query:
+            normalized = query.strip()
+            if normalized:
+                stmt = stmt.join(PriceLevel.stock).where(
+                    or_(Stock.name.ilike(f"%{normalized}%"), Stock.code.ilike(f"%{normalized}%"))
+                )
+        stmt = stmt.order_by(PriceLevel.stock_id.asc(), PriceLevel.price.asc())
         return list(self.db.execute(stmt).unique().scalars())
 
     def upsert_price_level(self, *, level_id: int | None, payload, actor_identifier: str) -> PriceLevel:
@@ -100,12 +123,25 @@ class AdminService:
         )
         return level
 
-    def list_support_states(self) -> list[SupportState]:
-        stmt = (
-            select(SupportState)
-            .options(joinedload(SupportState.stock), joinedload(SupportState.price_level))
-            .order_by(SupportState.updated_at.desc())
-        )
+    def list_support_states(
+        self,
+        *,
+        status: str | None = None,
+        stock_id: int | None = None,
+        query: str | None = None,
+    ) -> list[SupportState]:
+        stmt = select(SupportState).options(joinedload(SupportState.stock), joinedload(SupportState.price_level))
+        if status:
+            stmt = stmt.where(SupportState.status == SupportStatus(status))
+        if stock_id is not None:
+            stmt = stmt.where(SupportState.stock_id == stock_id)
+        if query:
+            normalized = query.strip()
+            if normalized:
+                stmt = stmt.join(SupportState.stock).where(
+                    or_(Stock.name.ilike(f"%{normalized}%"), Stock.code.ilike(f"%{normalized}%"))
+                )
+        stmt = stmt.order_by(SupportState.updated_at.desc())
         return list(self.db.execute(stmt).unique().scalars())
 
     def force_update_support_state(self, *, state_id: int, payload, actor_identifier: str) -> SupportState:
