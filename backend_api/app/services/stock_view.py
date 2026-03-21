@@ -379,10 +379,16 @@ class StockViewService:
         latest_bar = self._get_latest_bar_or_none(stock)
         primary_state = self._select_primary_support_state_or_none(stock.support_states)
         status = self._build_status_badge(primary_state.status if primary_state else SupportStatus.WAITING)
+        admin_home_support_note = next((
+            level.note
+            for level in stock.price_levels
+            if level.is_active and level.level_type == PriceLevelType.SUPPORT and level.source_label == "admin_home" and level.note
+        ), None)
         summary = (
-            primary_state.status_reason
-            if primary_state and primary_state.status_reason
-            else ('지지선 상태 자동 계산 대기 중입니다.' if primary_state is None else SCENARIO_TEXT[primary_state.status][0])
+            stock.operator_memo
+            or admin_home_support_note
+            or (primary_state.status_reason if primary_state and primary_state.status_reason else None)
+            or ('지지선 상태 자동 계산 대기 중입니다.' if primary_state is None else SCENARIO_TEXT[primary_state.status][0])
         )
         return HomeFeaturedStockItem(
             stock_code=stock.code,

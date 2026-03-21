@@ -1,4 +1,4 @@
-import { STATUS_LABELS, badgeClass, escapeHtml, formatDate } from './utils.js';
+import { badgeClass, escapeHtml } from './utils.js';
 
 export function renderStats(element, sessionData, dashboard) {
   const stats = [
@@ -48,7 +48,7 @@ export function renderStockSummary(element, stock, featuredStockIds = []) {
       <div><strong>${escapeHtml(stock.name)}</strong><p>${escapeHtml(stock.code)} · ${escapeHtml(stock.market_type)}</p></div>
       <div><span class="pill ${stock.is_active ? 'active' : 'inactive'}">${stock.is_active ? '운영 활성' : '비활성'}</span></div>
       <div><strong>섹터</strong><p>${escapeHtml(stock.sector || '-')}</p></div>
-      <div><strong>홈 추천</strong><p>${isFeatured ? '포함됨' : '미포함'}</p></div>
+      <div><strong>홈 관심종목</strong><p>${isFeatured ? '포함됨' : '미포함'}</p></div>
       <div class="full"><strong>운영 메모</strong><p>${escapeHtml(stock.operator_memo || '-')}</p></div>
     </div>`;
 }
@@ -79,61 +79,26 @@ export function renderPriceLevels(element, items, type) {
     .join('');
 }
 
-export function renderSupportStatesTable(element, items) {
+export function renderHomeWatchlistItems(element, items) {
   if (!items.length) {
-    element.innerHTML = '<div class="empty-inline">조건에 맞는 지지선 상태가 없습니다.</div>';
-    return;
-  }
-  element.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>종목명</th>
-          <th>종목코드</th>
-          <th>지지선 가격</th>
-          <th>현재 상태</th>
-          <th>최근 업데이트</th>
-          <th>사유</th>
-          <th>액션</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${items
-          .map(
-            (item) => `
-          <tr>
-            <td>${escapeHtml(item.stock_name || '-')}</td>
-            <td>${escapeHtml(item.stock_code || '-')}</td>
-            <td>${escapeHtml(item.level_price || '-')}</td>
-            <td><span class="pill state">${escapeHtml(STATUS_LABELS[item.status] || item.status)}</span></td>
-            <td>${escapeHtml(formatDate(item.updated_at))}</td>
-            <td>${escapeHtml(item.status_reason || '-')}</td>
-            <td><button class="small" data-force-state-id="${item.id}">강제 수정</button></td>
-          </tr>`,
-          )
-          .join('')}
-      </tbody>
-    </table>`;
-}
-
-export function renderFeaturedItems(element, items) {
-  if (!items.length) {
-    element.innerHTML = '<div class="empty-inline">홈 추천 종목을 검색으로 추가해주세요.</div>';
+    element.innerHTML = '<div class="empty-inline">현재 홈에 노출 중인 관심종목이 없습니다.</div>';
     return;
   }
   element.innerHTML = items
     .map(
-      (item, index) => `
-      <div class="list-card">
+      (item) => `
+      <div class="list-card featured-card">
         <div>
-          <strong>${escapeHtml(item.stock_name)}</strong>
-          <p>${escapeHtml(item.stock_code)} · 정렬 ${index + 1}</p>
+          <div class="section-title-row compact">
+            <strong>${escapeHtml(item.stock_name)}</strong>
+            <span class="pill ${item.is_active ? 'active' : 'inactive'}">${item.is_active ? '활성' : '비활성'}</span>
+          </div>
+          <p>${escapeHtml(item.stock_code)} · 지지선 ${escapeHtml(item.support_price || '-')}</p>
+          <p class="muted small">${escapeHtml(item.comment || '코멘트 없음')}</p>
         </div>
         <div class="button-row compact">
-          <button class="ghost-button small" data-featured-move="up" data-stock-id="${item.stock_id}" ${index === 0 ? 'disabled' : ''}>위로</button>
-          <button class="ghost-button small" data-featured-move="down" data-stock-id="${item.stock_id}" ${index === items.length - 1 ? 'disabled' : ''}>아래로</button>
-          <button class="ghost-button small" data-featured-toggle="${item.stock_id}">${item.is_active ? '비활성화' : '활성화'}</button>
-          <button class="ghost-button small" data-featured-remove="${item.stock_id}">제거</button>
+          <button class="ghost-button small" data-featured-edit="${item.stock_id}">수정</button>
+          <button class="ghost-button small" data-featured-remove="${item.stock_id}">홈 제외</button>
         </div>
       </div>`,
     )

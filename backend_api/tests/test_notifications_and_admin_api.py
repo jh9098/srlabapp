@@ -253,3 +253,67 @@ def test_admin_filters_for_stocks_levels_and_states(client):
     assert state_items
     assert all(item['status'] == 'TESTING_SUPPORT' for item in state_items)
     assert all('삼성' in item['stock_name'] or '삼성' in item['stock_code'] for item in state_items)
+
+
+def test_admin_home_featured_summary_prefers_operator_comment(client):
+    headers = admin_auth_headers(client)
+
+    stocks_response = client.get('/api/v1/admin/stocks', headers=headers, params={'q': '삼성전자'})
+    assert stocks_response.status_code == 200
+    stock = stocks_response.json()['data'][0]
+
+    stock_update_response = client.put(
+        f"/api/v1/admin/stocks/{stock['id']}",
+        headers=headers,
+        json={
+            'code': stock['code'],
+            'name': stock['name'],
+            'market_type': stock['market_type'],
+            'sector': stock['sector'],
+            'theme_tags': stock['theme_tags'],
+            'operator_memo': '운영자 코멘트 우선 노출',
+            'is_active': stock['is_active'],
+        },
+    )
+    assert stock_update_response.status_code == 200
+
+    level_response = client.get(
+        '/api/v1/admin/price-levels',
+        headers=headers,
+        params={'stock_id': stock['id'], 'level_type': 'SUPPORT'},
+    )
+    assert level_response.status_code == 200
+    admin_home_level = next((item for item in level_response.json()['data'] if item['source_label'] == 'admin_home'), None)
+
+    level_payload = {
+        'stock_id': stock['id'],
+        'level_type': 'SUPPORT',
+        'price': admin_home_level['price'] if admin_home_level else '65200',
+        'proximity_threshold_pct': admin_home_level['proximity_threshold_pct'] if admin_home_level else '1.50',
+        'rebound_threshold_pct': admin_home_level['rebound_threshold_pct'] if admin_home_level else '5.00',
+        'source_label': 'admin_home',
+        'note': '레벨 메모 fallback',
+        'is_active': True,
+    }
+    if admin_home_level:
+        upsert_level_response = client.put(
+            f"/api/v1/admin/price-levels/{admin_home_level['id']}",
+            headers=headers,
+            json=level_payload,
+        )
+    else:
+        upsert_level_response = client.post('/api/v1/admin/price-levels', headers=headers, json=level_payload)
+    assert upsert_level_response.status_code == 200
+
+    featured_response = client.put(
+        '/api/v1/admin/home-featured',
+        headers=headers,
+        json={'items': [{'stock_id': stock['id'], 'display_order': 1, 'is_active': True}]},
+    )
+    assert featured_response.status_code == 200
+
+    home_response = client.get('/api/v1/home')
+    assert home_response.status_code == 200
+    featured_items = home_response.json()['data']['featured_stocks']
+    samsung = next(item for item in featured_items if item['stock_code'] == stock['code'])
+    assert samsung['summary'] == '운영자 코멘트 우선 노출'
