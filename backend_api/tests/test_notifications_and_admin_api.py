@@ -189,12 +189,13 @@ class FakeFirestoreDocument:
         self.doc_id = doc_id
         self.should_fail_on_write = should_fail_on_write
 
-    def create(self, payload):
-        if self.should_fail_on_write:
-            raise RuntimeError("firestore write failed")
-        if self.doc_id in self.store:
-            raise FakeAlreadyExists()
-        self.store[self.doc_id] = dict(payload)
+    @property
+    def reference(self):
+        return self
+
+    def get(self):
+        payload = self.store.get(self.doc_id)
+        return type("DocSnapshot", (), {"exists": payload is not None, "to_dict": lambda self_: payload or {}})()
 
     def set(self, payload, merge=False):
         if self.should_fail_on_write:
@@ -204,23 +205,62 @@ class FakeFirestoreDocument:
         self.store[self.doc_id] = current
 
 
+class FakeFirestoreQuery:
+    def __init__(self, store: dict[str, dict], field_name: str, value: object, should_fail_on_write: bool = False) -> None:
+        self.store = store
+        self.field_name = field_name
+        self.value = value
+        self.should_fail_on_write = should_fail_on_write
+        self._limit: int | None = None
+
+    def limit(self, value: int):
+        self._limit = value
+        return self
+
+    def stream(self):
+        matches = [
+            FakeFirestoreDocument(self.store, doc_id, self.should_fail_on_write)
+            for doc_id, payload in self.store.items()
+            if payload.get(self.field_name) == self.value
+        ]
+        if self._limit is not None:
+            return matches[: self._limit]
+        return matches
+
+
 class FakeFirestoreCollection:
-    def __init__(self, store: dict[str, dict], should_fail_on_write: bool = False) -> None:
+    def __init__(self, store: dict[str, dict], *, should_fail_on_write: bool = False, next_auto_id) -> None:
         self.store = store
         self.should_fail_on_write = should_fail_on_write
+        self._next_auto_id = next_auto_id
 
-    def document(self, doc_id: str) -> FakeFirestoreDocument:
+    def document(self, doc_id: str | None = None) -> FakeFirestoreDocument:
+        if doc_id is None:
+            doc_id = f"auto-{self._next_auto_id()}"
         return FakeFirestoreDocument(self.store, doc_id, self.should_fail_on_write)
+
+    def where(self, field_name: str, op_string: str, value: object) -> FakeFirestoreQuery:
+        assert op_string == '=='
+        return FakeFirestoreQuery(self.store, field_name, value, self.should_fail_on_write)
 
 
 class FakeFirestoreClient:
     def __init__(self, *, should_fail_on_write: bool = False) -> None:
         self.collections: dict[str, dict[str, dict]] = {}
         self.should_fail_on_write = should_fail_on_write
+        self._auto_ids: dict[str, int] = {}
+
+    def _next_auto_id(self, name: str) -> int:
+        self._auto_ids[name] = self._auto_ids.get(name, 0) + 1
+        return self._auto_ids[name]
 
     def collection(self, name: str) -> FakeFirestoreCollection:
         store = self.collections.setdefault(name, {})
-        return FakeFirestoreCollection(store, self.should_fail_on_write)
+        return FakeFirestoreCollection(
+            store,
+            should_fail_on_write=self.should_fail_on_write,
+            next_auto_id=lambda: self._next_auto_id(name),
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -387,10 +427,6 @@ def firebase_writer_monkeypatch(monkeypatch):
         'app.services.firebase_watchlist_writer.get_firestore_server_timestamp',
         lambda: 'SERVER_TIMESTAMP',
     )
-    monkeypatch.setattr(
-        'app.services.firebase_watchlist_writer.get_firestore_already_exists_exception',
-        lambda: FakeAlreadyExists,
-    )
 
 
 def test_admin_stock_and_level_save_syncs_watchlist_to_firebase(
@@ -436,12 +472,18 @@ def test_admin_stock_and_level_save_syncs_watchlist_to_firebase(
     )
     assert feature_home.status_code == 200
 
-    watchlist_doc = firestore_client.collections['adminWatchlist']['123456']
+    watchlist_doc = next(doc for doc in firestore_client.collections['adminWatchlist'].values() if doc['ticker'] == '123456')
     assert watchlist_doc['ticker'] == '123456'
     assert watchlist_doc['name'] == '테스트종목'
     assert watchlist_doc['supportLines'] == [66100]
+    assert watchlist_doc['memo'] == '단기 지지 확인 구간'
     assert watchlist_doc['comment'] == '단기 지지 확인 구간'
-    assert watchlist_doc['isActive'] is True
+    assert watchlist_doc['alertEnabled'] is True
+    assert watchlist_doc['alertCooldownHours'] == 1
+    assert watchlist_doc['alertThresholdPercent'] == 2
+    assert watchlist_doc['analysisId'] is None
+    assert watchlist_doc['isPublic'] is True
+    assert watchlist_doc['portfolioReady'] is True
     assert watchlist_doc['isHomeFeatured'] is True
     assert watchlist_doc['source'] == 'app_admin'
 
@@ -451,10 +493,6 @@ def test_admin_stock_save_rolls_back_when_firebase_write_fails(client, db_sessio
     monkeypatch.setattr(
         'app.services.firebase_watchlist_writer.get_firestore_server_timestamp',
         lambda: 'SERVER_TIMESTAMP',
-    )
-    monkeypatch.setattr(
-        'app.services.firebase_watchlist_writer.get_firestore_already_exists_exception',
-        lambda: FakeAlreadyExists,
     )
     original_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_admin_firestore_client] = lambda: failing_client
@@ -505,10 +543,77 @@ def test_home_exclusion_soft_disables_firebase_home_flag(
     )
     assert remove_from_home.status_code == 200
 
-    watchlist_doc = firestore_client.collections['adminWatchlist'][stock.code]
+    watchlist_doc = next(doc for doc in firestore_client.collections['adminWatchlist'].values() if doc['ticker'] == stock.code)
     assert watchlist_doc['isHomeFeatured'] is False
-    assert watchlist_doc['isActive'] is True
+    assert watchlist_doc['isPublic'] is True
 
     home_featured_row = db_session.scalar(select(HomeFeaturedStock).where(HomeFeaturedStock.stock_id == stock.id))
     assert home_featured_row is not None
     assert home_featured_row.is_active is False
+
+
+def test_admin_stock_save_updates_existing_random_id_watchlist_doc(client, firestore_client):
+    firestore_client.collections['adminWatchlist'] = {
+        'random-doc-id': {
+            'ticker': '777777',
+            'name': '기존종목',
+            'supportLines': [7000],
+            'resistanceLines': [],
+            'memo': '기존 메모',
+            'alertEnabled': True,
+            'alertCooldownHours': 1,
+            'alertThresholdPercent': 2,
+            'analysisId': None,
+            'isPublic': True,
+            'portfolioReady': True,
+            'createdAt': 'OLD_CREATED',
+            'updatedAt': 'OLD_UPDATED',
+        }
+    }
+
+    headers = admin_auth_headers(client)
+    response = client.post(
+        '/api/v1/admin/stocks',
+        headers=headers,
+        json={
+            'code': '777777',
+            'name': '랜덤문서종목',
+            'market_type': 'KOSPI',
+            'operator_memo': '새 메모',
+            'is_active': True,
+        },
+    )
+    assert response.status_code == 200
+
+    docs = firestore_client.collections['adminWatchlist']
+    assert list(docs.keys()) == ['random-doc-id']
+    watchlist_doc = docs['random-doc-id']
+    assert watchlist_doc['name'] == '랜덤문서종목'
+    assert watchlist_doc['memo'] == '새 메모'
+    assert watchlist_doc['createdAt'] == 'OLD_CREATED'
+    assert watchlist_doc['updatedAt'] != 'OLD_UPDATED'
+
+
+def test_admin_stock_deactivate_updates_public_flags(client, db_session, firestore_client):
+    headers = admin_auth_headers(client)
+    stock = db_session.scalar(select(Stock).where(Stock.code == '005930'))
+    assert stock is not None
+
+    response = client.put(
+        f'/api/v1/admin/stocks/{stock.id}',
+        headers=headers,
+        json={
+            'code': stock.code,
+            'name': stock.name,
+            'market_type': stock.market_type.value,
+            'sector': stock.sector,
+            'theme_tags': stock.theme_tags,
+            'operator_memo': stock.operator_memo,
+            'is_active': False,
+        },
+    )
+    assert response.status_code == 200
+
+    watchlist_doc = next(doc for doc in firestore_client.collections['adminWatchlist'].values() if doc['ticker'] == stock.code)
+    assert watchlist_doc['isPublic'] is False
+    assert watchlist_doc['portfolioReady'] is False
