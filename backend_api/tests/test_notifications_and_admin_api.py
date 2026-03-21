@@ -150,11 +150,17 @@ def test_admin_content_crud_and_public_visibility(client):
     assert content_id not in public_ids
 
 
+import pytest
 from sqlalchemy import select
 
+from app.api.v1.admin import get_admin_firestore_client
+from app.main import app
+from app.models.admin_audit_log import AdminAuditLog
 from app.models.device_token import DeviceToken
+from app.models.home_featured_stock import HomeFeaturedStock
 from app.models.enums import NotificationDeliveryStatus
 from app.models.notification import Notification
+from app.models.stock import Stock
 from app.services.notification_service import NotificationService
 from app.services.push_service import PushProvider, PushSendResult
 
@@ -171,6 +177,62 @@ class FakeInvalidPushProvider(PushProvider):
             failure_reason='UNREGISTERED',
             should_deactivate_token=True,
         )
+
+
+class FakeAlreadyExists(Exception):
+    pass
+
+
+class FakeFirestoreDocument:
+    def __init__(self, store: dict[str, dict], doc_id: str, should_fail_on_write: bool = False) -> None:
+        self.store = store
+        self.doc_id = doc_id
+        self.should_fail_on_write = should_fail_on_write
+
+    def create(self, payload):
+        if self.should_fail_on_write:
+            raise RuntimeError("firestore write failed")
+        if self.doc_id in self.store:
+            raise FakeAlreadyExists()
+        self.store[self.doc_id] = dict(payload)
+
+    def set(self, payload, merge=False):
+        if self.should_fail_on_write:
+            raise RuntimeError("firestore write failed")
+        current = self.store.get(self.doc_id, {}) if merge else {}
+        current.update(payload)
+        self.store[self.doc_id] = current
+
+
+class FakeFirestoreCollection:
+    def __init__(self, store: dict[str, dict], should_fail_on_write: bool = False) -> None:
+        self.store = store
+        self.should_fail_on_write = should_fail_on_write
+
+    def document(self, doc_id: str) -> FakeFirestoreDocument:
+        return FakeFirestoreDocument(self.store, doc_id, self.should_fail_on_write)
+
+
+class FakeFirestoreClient:
+    def __init__(self, *, should_fail_on_write: bool = False) -> None:
+        self.collections: dict[str, dict[str, dict]] = {}
+        self.should_fail_on_write = should_fail_on_write
+
+    def collection(self, name: str) -> FakeFirestoreCollection:
+        store = self.collections.setdefault(name, {})
+        return FakeFirestoreCollection(store, self.should_fail_on_write)
+
+
+@pytest.fixture(autouse=True)
+def firestore_client():
+    client = FakeFirestoreClient()
+    original_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_admin_firestore_client] = lambda: client
+    try:
+        yield client
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(original_overrides)
 
 
 def test_device_token_deactivate_api(client, db_session):
@@ -317,3 +379,136 @@ def test_admin_home_featured_summary_prefers_operator_comment(client):
     featured_items = home_response.json()['data']['featured_stocks']
     samsung = next(item for item in featured_items if item['stock_code'] == stock['code'])
     assert samsung['summary'] == '운영자 코멘트 우선 노출'
+
+
+@pytest.fixture(autouse=True)
+def firebase_writer_monkeypatch(monkeypatch):
+    monkeypatch.setattr(
+        'app.services.firebase_watchlist_writer.get_firestore_server_timestamp',
+        lambda: 'SERVER_TIMESTAMP',
+    )
+    monkeypatch.setattr(
+        'app.services.firebase_watchlist_writer.get_firestore_already_exists_exception',
+        lambda: FakeAlreadyExists,
+    )
+
+
+def test_admin_stock_and_level_save_syncs_watchlist_to_firebase(
+    client,
+    firestore_client,
+):
+    headers = admin_auth_headers(client)
+
+    create_stock = client.post(
+        '/api/v1/admin/stocks',
+        headers=headers,
+        json={
+            'code': '123456',
+            'name': '테스트종목',
+            'market_type': 'KOSPI',
+            'sector': '반도체',
+            'theme_tags': '테스트',
+            'operator_memo': '단기 지지 확인 구간',
+            'is_active': True,
+        },
+    )
+    assert create_stock.status_code == 200
+    stock_id = create_stock.json()['data']['id']
+
+    save_level = client.post(
+        '/api/v1/admin/price-levels',
+        headers=headers,
+        json={
+            'stock_id': stock_id,
+            'level_type': 'SUPPORT',
+            'price': '66100',
+            'source_label': 'admin_home',
+            'note': '대표 지지선',
+            'is_active': True,
+        },
+    )
+    assert save_level.status_code == 200
+
+    feature_home = client.put(
+        '/api/v1/admin/home-featured',
+        headers=headers,
+        json={'items': [{'stock_id': stock_id, 'display_order': 1, 'is_active': True}]},
+    )
+    assert feature_home.status_code == 200
+
+    watchlist_doc = firestore_client.collections['adminWatchlist']['123456']
+    assert watchlist_doc['ticker'] == '123456'
+    assert watchlist_doc['name'] == '테스트종목'
+    assert watchlist_doc['supportLines'] == [66100]
+    assert watchlist_doc['comment'] == '단기 지지 확인 구간'
+    assert watchlist_doc['isActive'] is True
+    assert watchlist_doc['isHomeFeatured'] is True
+    assert watchlist_doc['source'] == 'app_admin'
+
+
+def test_admin_stock_save_rolls_back_when_firebase_write_fails(client, db_session, monkeypatch):
+    failing_client = FakeFirestoreClient(should_fail_on_write=True)
+    monkeypatch.setattr(
+        'app.services.firebase_watchlist_writer.get_firestore_server_timestamp',
+        lambda: 'SERVER_TIMESTAMP',
+    )
+    monkeypatch.setattr(
+        'app.services.firebase_watchlist_writer.get_firestore_already_exists_exception',
+        lambda: FakeAlreadyExists,
+    )
+    original_overrides = dict(app.dependency_overrides)
+    app.dependency_overrides[get_admin_firestore_client] = lambda: failing_client
+    try:
+        headers = admin_auth_headers(client)
+        response = client.post(
+            '/api/v1/admin/stocks',
+            headers=headers,
+            json={
+                'code': '654321',
+                'name': '실패종목',
+                'market_type': 'KOSDAQ',
+                'operator_memo': '실패 테스트',
+                'is_active': True,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(original_overrides)
+
+    assert response.status_code == 503
+    assert response.json()['error_code'] == 'FIREBASE_WATCHLIST_WRITE_FAILED'
+    assert db_session.scalar(select(Stock).where(Stock.code == '654321')) is None
+    assert not failing_client.collections.get('adminWatchlist')
+    assert not list(db_session.scalars(select(AdminAuditLog).where(AdminAuditLog.action == 'upsert_stock')))
+
+
+def test_home_exclusion_soft_disables_firebase_home_flag(
+    client,
+    db_session,
+    firestore_client,
+):
+    headers = admin_auth_headers(client)
+    stock = db_session.scalar(select(Stock).where(Stock.code == '005930'))
+    assert stock is not None
+
+    initial_feature = client.put(
+        '/api/v1/admin/home-featured',
+        headers=headers,
+        json={'items': [{'stock_id': stock.id, 'display_order': 1, 'is_active': True}]},
+    )
+    assert initial_feature.status_code == 200
+
+    remove_from_home = client.put(
+        '/api/v1/admin/home-featured',
+        headers=headers,
+        json={'items': []},
+    )
+    assert remove_from_home.status_code == 200
+
+    watchlist_doc = firestore_client.collections['adminWatchlist'][stock.code]
+    assert watchlist_doc['isHomeFeatured'] is False
+    assert watchlist_doc['isActive'] is True
+
+    home_featured_row = db_session.scalar(select(HomeFeaturedStock).where(HomeFeaturedStock.stock_id == stock.id))
+    assert home_featured_row is not None
+    assert home_featured_row.is_active is False

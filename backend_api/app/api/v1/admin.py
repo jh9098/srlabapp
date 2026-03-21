@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.db.session import get_db
+from app.integrations.firebase_admin import FirebaseConfigurationError, get_firestore_client
 from app.models.enums import SupportStatus
 from app.schemas.admin import (
     AdminAuditLogItem,
@@ -28,6 +29,17 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 def get_admin_actor(token: str = Depends(get_admin_bearer_token)) -> str:
     return AdminAuthService().decode_token(token).sub
+
+
+def get_admin_firestore_client():
+    try:
+        return get_firestore_client()
+    except FirebaseConfigurationError as exc:
+        raise AppError(
+            message="Firebase 관심종목 원본 반영에 실패했습니다.",
+            error_code="FIREBASE_WATCHLIST_WRITE_FAILED",
+            status_code=503,
+        ) from exc
 
 
 @router.post("/auth/login", response_model=ApiResponse[AdminLoginResponseData])
@@ -84,8 +96,13 @@ def upsert_stock(
     stock_id: int | None = None,
     actor_identifier: str = Depends(get_admin_actor),
     db: Session = Depends(get_db),
+    firestore_client=Depends(get_admin_firestore_client),
 ) -> ApiResponse[dict]:
-    stock = AdminService(db).upsert_stock(stock_id=stock_id, payload=payload, actor_identifier=actor_identifier)
+    stock = AdminService(db, firestore_client).upsert_stock(
+        stock_id=stock_id,
+        payload=payload,
+        actor_identifier=actor_identifier,
+    )
     db.commit()
     return ApiResponse(message="종목을 저장했습니다.", data={"id": stock.id, "code": stock.code, "name": stock.name})
 
@@ -115,8 +132,13 @@ def upsert_price_level(
     level_id: int | None = None,
     actor_identifier: str = Depends(get_admin_actor),
     db: Session = Depends(get_db),
+    firestore_client=Depends(get_admin_firestore_client),
 ) -> ApiResponse[dict]:
-    level = AdminService(db).upsert_price_level(level_id=level_id, payload=payload, actor_identifier=actor_identifier)
+    level = AdminService(db, firestore_client).upsert_price_level(
+        level_id=level_id,
+        payload=payload,
+        actor_identifier=actor_identifier,
+    )
     db.commit()
     return ApiResponse(message="가격 레벨을 저장했습니다.", data={"id": level.id})
 
@@ -184,8 +206,12 @@ def replace_home_featured(
     payload: HomeFeaturedUpdateRequest,
     actor_identifier: str = Depends(get_admin_actor),
     db: Session = Depends(get_db),
+    firestore_client=Depends(get_admin_firestore_client),
 ) -> ApiResponse[list[dict]]:
-    items = AdminService(db).replace_home_featured(items=payload.items, actor_identifier=actor_identifier)
+    items = AdminService(db, firestore_client).replace_home_featured(
+        items=payload.items,
+        actor_identifier=actor_identifier,
+    )
     db.commit()
     return ApiResponse(message="홈 노출 구성을 저장했습니다.", data=[{"id": item.id, "stock_id": item.stock_id} for item in items])
 

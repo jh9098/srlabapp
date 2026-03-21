@@ -16,14 +16,18 @@ from app.models.support_state import SupportState
 from app.models.theme import Theme
 from app.models.theme_stock_map import ThemeStockMap
 from app.services.audit_log_service import AuditLogService
+from app.services.firebase_watchlist_writer import FirebaseWatchlistWriter
 from app.services.notification_service import NotificationService
 
 
 class AdminService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, firestore_client=None) -> None:
         self.db = db
         self.audit = AuditLogService(db)
         self.notifications = NotificationService(db)
+        self.firebase_watchlist_writer = (
+            FirebaseWatchlistWriter(db, firestore_client) if firestore_client is not None else None
+        )
 
     def list_dashboard(self) -> dict:
         today = datetime.now(timezone.utc).date()
@@ -77,6 +81,7 @@ class AdminService:
             entity_id=str(stock.id),
             detail={"code": stock.code, "name": stock.name, "is_active": stock.is_active},
         )
+        self._sync_stock_to_firebase(stock=stock, actor_identifier=actor_identifier)
         return stock
 
     def list_price_levels(
@@ -122,6 +127,9 @@ class AdminService:
             entity_id=str(level.id),
             detail={"stock_id": level.stock_id, "price": str(level.price), "type": level.level_type.value},
         )
+        stock = self.db.get(Stock, level.stock_id)
+        if stock is not None:
+            self._sync_stock_to_firebase(stock=stock, actor_identifier=actor_identifier)
         return level
 
     def _ensure_waiting_support_state(self, level: PriceLevel) -> None:
@@ -197,12 +205,33 @@ class AdminService:
         return list(self.db.execute(stmt).unique().scalars())
 
     def replace_home_featured(self, *, items, actor_identifier: str) -> list[HomeFeaturedStock]:
-        self.db.execute(delete(HomeFeaturedStock))
+        requested_by_stock_id = {item.stock_id: item for item in items}
+        existing_rows = list(self.db.scalars(select(HomeFeaturedStock)))
+        existing_by_stock_id = {row.stock_id: row for row in existing_rows}
+        synced_stock_codes: list[str] = []
+
         new_items: list[HomeFeaturedStock] = []
-        for item in items:
-            row = HomeFeaturedStock(stock_id=item.stock_id, display_order=item.display_order, is_active=item.is_active)
-            self.db.add(row)
+        for stock_id, item in requested_by_stock_id.items():
+            row = existing_by_stock_id.get(stock_id)
+            if row is None:
+                row = HomeFeaturedStock(stock_id=stock_id, display_order=item.display_order, is_active=item.is_active)
+                self.db.add(row)
+            else:
+                row.display_order = item.display_order
+                row.is_active = item.is_active
             new_items.append(row)
+            stock = self.db.get(Stock, stock_id)
+            if stock is not None:
+                synced_stock_codes.append(stock.code)
+
+        for stock_id, row in existing_by_stock_id.items():
+            if stock_id in requested_by_stock_id:
+                continue
+            row.is_active = False
+            stock = self.db.get(Stock, stock_id)
+            if stock is not None:
+                synced_stock_codes.append(stock.code)
+
         self.db.flush()
         self.audit.log(
             actor_identifier=actor_identifier,
@@ -211,6 +240,7 @@ class AdminService:
             entity_id="bulk",
             detail={"count": len(new_items)},
         )
+        self._sync_home_featured_to_firebase(stock_codes=synced_stock_codes, actor_identifier=actor_identifier)
         return new_items
 
     def list_themes(self) -> list[Theme]:
@@ -308,3 +338,25 @@ class AdminService:
             memo=payload.memo,
             detail={"title": payload.title, "target_path": payload.target_path},
         )
+
+    def _sync_stock_to_firebase(self, *, stock: Stock, actor_identifier: str) -> None:
+        if self.firebase_watchlist_writer is None:
+            return
+        try:
+            self.firebase_watchlist_writer.sync_stock(stock=stock, actor_identifier=actor_identifier)
+        except AppError:
+            self.db.rollback()
+            raise
+
+    def _sync_home_featured_to_firebase(self, *, stock_codes: list[str], actor_identifier: str) -> None:
+        if self.firebase_watchlist_writer is None or not stock_codes:
+            return
+        unique_codes = list(dict.fromkeys(stock_codes))
+        try:
+            self.firebase_watchlist_writer.sync_home_featured_flags(
+                stock_codes=unique_codes,
+                actor_identifier=actor_identifier,
+            )
+        except AppError:
+            self.db.rollback()
+            raise
