@@ -10,7 +10,6 @@ source .venv/bin/activate
 pip install --no-build-isolation -e .
 cp .env.example .env
 alembic upgrade head
-python scripts/seed_minimum_data.py
 python scripts/check_release_readiness.py
 uvicorn app.main:app --reload
 ```
