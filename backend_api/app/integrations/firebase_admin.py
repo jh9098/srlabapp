@@ -29,6 +29,19 @@ def get_firestore_client() -> Any:
     return firestore.client(app=app)
 
 
+def get_firestore_server_timestamp() -> Any:
+    _, _, firestore = _load_firebase_admin_modules()
+    return firestore.SERVER_TIMESTAMP
+
+
+def get_firestore_already_exists_exception() -> type[Exception] | None:
+    try:
+        from google.api_core.exceptions import AlreadyExists
+    except ImportError:  # pragma: no cover - depends on runtime installation
+        return None
+    return AlreadyExists
+
+
 def _get_or_initialize_app(firebase_admin: Any, credentials: Any) -> Any:
     global _FIREBASE_APP
     if _FIREBASE_APP is not None:
