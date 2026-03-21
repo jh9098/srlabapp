@@ -114,6 +114,7 @@ class AdminService:
         level.note = payload.note
         level.is_active = payload.is_active
         self.db.flush()
+        self._ensure_waiting_support_state(level)
         self.audit.log(
             actor_identifier=actor_identifier,
             action="upsert_price_level",
@@ -122,6 +123,28 @@ class AdminService:
             detail={"stock_id": level.stock_id, "price": str(level.price), "type": level.level_type.value},
         )
         return level
+
+    def _ensure_waiting_support_state(self, level: PriceLevel) -> None:
+        if level.level_type != PriceLevelType.SUPPORT or not level.is_active:
+            return
+
+        existing_state = self.db.scalar(
+            select(SupportState).where(SupportState.price_level_id == level.id)
+        )
+        if existing_state is not None:
+            return
+
+        self.db.add(
+            SupportState(
+                stock_id=level.stock_id,
+                price_level_id=level.id,
+                status=SupportStatus.WAITING,
+                reference_price=level.price,
+                last_price=level.price,
+                status_reason="관리자 지지선 등록으로 생성된 초기 상태",
+            )
+        )
+        self.db.flush()
 
     def list_support_states(
         self,
