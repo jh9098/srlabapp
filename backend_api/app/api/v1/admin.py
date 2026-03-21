@@ -65,11 +65,12 @@ def get_dashboard(
 
 @router.get("/stocks", response_model=ApiResponse[list[dict]])
 def list_stocks(
+    q: str | None = Query(default=None),
     actor_identifier: str = Depends(get_admin_actor),
     db: Session = Depends(get_db),
 ) -> ApiResponse[list[dict]]:
     _ = actor_identifier
-    items = AdminService(db).list_stocks()
+    items = AdminService(db).list_stocks(query=q)
     return ApiResponse(message="종목 목록입니다.", data=[{
         "id": item.id, "code": item.code, "name": item.name, "market_type": item.market_type.value,
         "sector": item.sector, "theme_tags": item.theme_tags, "operator_memo": item.operator_memo, "is_active": item.is_active
@@ -91,14 +92,18 @@ def upsert_stock(
 
 @router.get("/price-levels", response_model=ApiResponse[list[dict]])
 def list_price_levels(
+    stock_id: int | None = Query(default=None),
+    q: str | None = Query(default=None),
+    level_type: str | None = Query(default=None),
     actor_identifier: str = Depends(get_admin_actor),
     db: Session = Depends(get_db),
 ) -> ApiResponse[list[dict]]:
     _ = actor_identifier
-    items = AdminService(db).list_price_levels()
+    items = AdminService(db).list_price_levels(stock_id=stock_id, query=q, level_type=level_type)
     return ApiResponse(message="가격 레벨 목록입니다.", data=[{
-        "id": item.id, "stock_id": item.stock_id, "stock_name": item.stock.name if item.stock else None,
+        "id": item.id, "stock_id": item.stock_id, "stock_code": item.stock.code if item.stock else None, "stock_name": item.stock.name if item.stock else None,
         "level_type": item.level_type.value, "price": str(item.price), "is_active": item.is_active,
+        "proximity_threshold_pct": str(item.proximity_threshold_pct), "rebound_threshold_pct": str(item.rebound_threshold_pct),
         "source_label": item.source_label, "note": item.note
     } for item in items])
 
@@ -118,15 +123,18 @@ def upsert_price_level(
 
 @router.get("/support-states", response_model=ApiResponse[list[dict]])
 def list_support_states(
+    status: str | None = Query(default=None),
+    stock_id: int | None = Query(default=None),
+    q: str | None = Query(default=None),
     actor_identifier: str = Depends(get_admin_actor),
     db: Session = Depends(get_db),
 ) -> ApiResponse[list[dict]]:
     _ = actor_identifier
-    items = AdminService(db).list_support_states()
+    items = AdminService(db).list_support_states(status=status, stock_id=stock_id, query=q)
     return ApiResponse(message="지지선 상태 목록입니다.", data=[{
         "id": item.id, "stock_name": item.stock.name if item.stock else None, "stock_code": item.stock.code if item.stock else None,
         "price_level_id": item.price_level_id, "level_price": str(item.price_level.price) if item.price_level else None,
-        "status": item.status.value, "status_reason": item.status_reason, "updated_at": item.updated_at.isoformat() if item.updated_at else None
+        "status": item.status.value, "status_reason": item.status_reason, "invalid_reason": item.invalid_reason, "updated_at": item.updated_at.isoformat() if item.updated_at else None
     } for item in items])
 
 
@@ -166,7 +174,7 @@ def list_home_featured(
     _ = actor_identifier
     items = AdminService(db).list_home_featured()
     return ApiResponse(message="홈 노출 목록입니다.", data=[{
-        "id": item.id, "stock_id": item.stock_id, "stock_name": item.stock.name if item.stock else None,
+        "id": item.id, "stock_id": item.stock_id, "stock_code": item.stock.code if item.stock else None, "stock_name": item.stock.name if item.stock else None,
         "display_order": item.display_order, "is_active": item.is_active
     } for item in items])
 

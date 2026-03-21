@@ -1,3 +1,5 @@
+from app.models.enums import MarketType
+
 def test_health_endpoints(client) -> None:
     root_response = client.get('/health')
     assert root_response.status_code == 200
@@ -60,3 +62,22 @@ def test_get_theme_detail_and_contents_api(client) -> None:
     content_items = contents_response.json()['data']['items']
     assert content_items
     assert all(item['category'] == 'SHORTS' for item in content_items)
+
+
+def test_get_home_api_tolerates_missing_featured_state(client, db_session) -> None:
+    from app.models.home_featured_stock import HomeFeaturedStock
+    from app.models.stock import Stock
+
+    stock = Stock(code='999999', name='상태대기종목', market_type=MarketType.KOSPI, is_active=True)
+    db_session.add(stock)
+    db_session.flush()
+    db_session.add(HomeFeaturedStock(stock_id=stock.id, display_order=0, is_active=True))
+    db_session.commit()
+
+    response = client.get('/api/v1/home', headers={'X-User-Identifier': 'demo-user'})
+
+    assert response.status_code == 200
+    payload = response.json()['data']
+    target = next(item for item in payload['featured_stocks'] if item['stock_code'] == '999999')
+    assert target['status']['code'] == 'WAITING'
+    assert '대기' in target['summary'] or '자동 계산 대기' in target['summary']

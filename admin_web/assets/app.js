@@ -1,5 +1,20 @@
-const storageKey = 'srlab-admin-session';
+import { apiRequest, loginRequest } from './api.js';
+import {
+  renderContentOptions,
+  renderFeaturedItems,
+  renderPriceLevels,
+  renderSelectionSummary,
+  renderStats,
+  renderStockSearchResults,
+  renderStockSummary,
+  renderSupportStatesTable,
+  renderThemeOptions,
+  renderThemeSearchResults,
+  renderThemeStockList,
+} from './renderers.js';
+import { byText, numberOrNull, setMessage } from './utils.js';
 
+const storageKey = 'srlab-admin-session';
 const runtimeConfig = window.__SRLAB_ADMIN_CONFIG__ || {};
 
 function detectDefaultApiBaseUrl() {
@@ -14,207 +29,239 @@ function detectDefaultApiBaseUrl() {
   return `${protocol}//${hostname}${normalizedPort}/api/v1`;
 }
 
-function detectDefaultAdminUsername() {
-  return runtimeConfig.adminUsername || 'admin';
-}
-
-
-const state = {
+const appState = {
   apiBaseUrl: detectDefaultApiBaseUrl(),
   token: '',
   adminUsername: '',
+  data: {
+    session: null,
+    dashboard: null,
+    stocks: [],
+    priceLevels: [],
+    supportStates: [],
+    homeFeatured: [],
+    themes: [],
+    contents: [],
+  },
+  ui: {
+    selectedStockId: null,
+    selectedLevelStockId: null,
+    featuredDraft: [],
+    selectedThemeId: null,
+    themeStockDraft: [],
+    selectedContentId: null,
+    selectedContentStockId: null,
+    selectedContentThemeId: null,
+    stateForceTarget: null,
+  },
 };
 
-const elements = {
-  apiBaseUrl: document.getElementById('apiBaseUrl'),
-  adminUsername: document.getElementById('adminUsername'),
-  adminPassword: document.getElementById('adminPassword'),
-  loginButton: document.getElementById('loginButton'),
-  logoutButton: document.getElementById('logoutButton'),
-  loginMessage: document.getElementById('loginMessage'),
-  loginPanel: document.getElementById('loginPanel'),
-  dashboardPanel: document.getElementById('dashboardPanel'),
-  dashboardStats: document.getElementById('dashboardStats'),
-  crudPanel: document.getElementById('crudPanel'),
-  manualPushPanel: document.getElementById('manualPushPanel'),
-  resourcesPanel: document.getElementById('resourcesPanel'),
-  refreshButton: document.getElementById('refreshButton'),
-  pushUserIdentifier: document.getElementById('pushUserIdentifier'),
-  pushTargetPath: document.getElementById('pushTargetPath'),
-  pushTitle: document.getElementById('pushTitle'),
-  pushMemo: document.getElementById('pushMemo'),
-  pushMessage: document.getElementById('pushMessage'),
-  pushButton: document.getElementById('pushButton'),
-  pushMessageStatus: document.getElementById('pushMessageStatus'),
-  stockId: document.getElementById('stockId'),
-  stockCode: document.getElementById('stockCode'),
-  stockName: document.getElementById('stockName'),
-  stockMarketType: document.getElementById('stockMarketType'),
-  stockSector: document.getElementById('stockSector'),
-  stockThemeTags: document.getElementById('stockThemeTags'),
-  stockMemo: document.getElementById('stockMemo'),
-  stockActive: document.getElementById('stockActive'),
-  saveStockButton: document.getElementById('saveStockButton'),
-  stockFormMessage: document.getElementById('stockFormMessage'),
-  featuredItems: document.getElementById('featuredItems'),
-  saveFeaturedButton: document.getElementById('saveFeaturedButton'),
-  featuredFormMessage: document.getElementById('featuredFormMessage'),
-  themeId: document.getElementById('themeId'),
-  themeName: document.getElementById('themeName'),
-  themeScore: document.getElementById('themeScore'),
-  themeSummary: document.getElementById('themeSummary'),
-  themeStocks: document.getElementById('themeStocks'),
-  themeActive: document.getElementById('themeActive'),
-  saveThemeButton: document.getElementById('saveThemeButton'),
-  themeFormMessage: document.getElementById('themeFormMessage'),
-  contentId: document.getElementById('contentId'),
-  contentCategory: document.getElementById('contentCategory'),
-  contentTitle: document.getElementById('contentTitle'),
-  contentSummary: document.getElementById('contentSummary'),
-  contentUrl: document.getElementById('contentUrl'),
-  contentThumbnailUrl: document.getElementById('contentThumbnailUrl'),
-  contentStockId: document.getElementById('contentStockId'),
-  contentThemeId: document.getElementById('contentThemeId'),
-  contentSortOrder: document.getElementById('contentSortOrder'),
-  contentPublishedAt: document.getElementById('contentPublishedAt'),
-  contentPublished: document.getElementById('contentPublished'),
-  saveContentButton: document.getElementById('saveContentButton'),
-  contentFormMessage: document.getElementById('contentFormMessage'),
-  stocksOutput: document.getElementById('stocksOutput'),
-  levelsOutput: document.getElementById('levelsOutput'),
-  statesOutput: document.getElementById('statesOutput'),
-  eventsOutput: document.getElementById('eventsOutput'),
-  featuredOutput: document.getElementById('featuredOutput'),
-  themesOutput: document.getElementById('themesOutput'),
-  contentsOutput: document.getElementById('contentsOutput'),
-  logsOutput: document.getElementById('logsOutput'),
-};
+const ids = [
+  'apiBaseUrl', 'adminUsername', 'adminPassword', 'loginButton', 'logoutButton', 'loginMessage',
+  'loginPanel', 'dashboardPanel', 'dashboardStats', 'workspacePanel', 'manualPushPanel', 'refreshButton',
+  'stockSearchInput', 'stockSearchResults', 'stockCode', 'stockName', 'stockMarketType', 'stockSector',
+  'stockThemeTags', 'stockMemo', 'stockActive', 'saveStockButton', 'resetStockButton', 'stockCreateNewButton',
+  'stockFormMessage', 'selectedStockSummary', 'levelStockSearchInput', 'levelStockSearchResults',
+  'levelStockSummary', 'priceLevelType', 'priceLevelPrice', 'priceLevelProximity', 'priceLevelRebound',
+  'priceLevelSource', 'priceLevelNote', 'savePriceLevelButton', 'priceLevelMessage', 'supportLevelsList',
+  'resistanceLevelsList', 'stateStatusFilter', 'stateSearchInput', 'supportStatesTable', 'featuredSearchInput',
+  'featuredSearchResults', 'featuredItemsList', 'saveFeaturedButton', 'featuredFormMessage', 'themeSelect',
+  'themeName', 'themeScore', 'themeSummary', 'themeActive', 'themeStockSearchInput', 'themeStockSearchResults',
+  'themeStockList', 'saveThemeButton', 'themeFormMessage', 'themeCreateNewButton', 'contentSelect',
+  'contentCategory', 'contentTitle', 'contentSummary', 'contentUrl', 'contentThumbnailUrl', 'contentSortOrder',
+  'contentPublishedAt', 'contentPublished', 'contentStockSearchInput', 'contentStockSearchResults',
+  'contentStockSummary', 'contentThemeSearchInput', 'contentThemeSearchResults', 'contentThemeSummary',
+  'saveContentButton', 'contentFormMessage', 'contentCreateNewButton', 'pushUserIdentifier', 'pushTargetPath',
+  'pushTitle', 'pushMemo', 'pushMessage', 'pushButton', 'pushMessageStatus', 'stateForceModal',
+  'stateForceTarget', 'stateForceStatus', 'stateForceMemo', 'stateForceReason', 'stateForceInvalidReason',
+  'submitStateForceButton', 'cancelStateForceButton', 'closeStateModalButton', 'stateForceMessage', 'tabNav',
+];
+const elements = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
 
 function persistSession() {
-  localStorage.setItem(storageKey, JSON.stringify(state));
+  localStorage.setItem(storageKey, JSON.stringify({
+    apiBaseUrl: appState.apiBaseUrl,
+    token: appState.token,
+    adminUsername: appState.adminUsername,
+  }));
 }
 
 function loadSession() {
   const saved = localStorage.getItem(storageKey);
+  elements.apiBaseUrl.value = appState.apiBaseUrl;
+  elements.adminUsername.value = runtimeConfig.adminUsername || 'admin';
   if (!saved) {
-    state.apiBaseUrl = state.apiBaseUrl || detectDefaultApiBaseUrl();
-    elements.apiBaseUrl.value = state.apiBaseUrl;
-    elements.adminUsername.value = detectDefaultAdminUsername();
     return;
   }
   const parsed = JSON.parse(saved);
-  state.apiBaseUrl = parsed.apiBaseUrl || detectDefaultApiBaseUrl();
-  state.token = parsed.token || '';
-  state.adminUsername = parsed.adminUsername || '';
-  elements.apiBaseUrl.value = state.apiBaseUrl;
-  elements.adminUsername.value = state.adminUsername || detectDefaultAdminUsername();
+  appState.apiBaseUrl = parsed.apiBaseUrl || appState.apiBaseUrl;
+  appState.token = parsed.token || '';
+  appState.adminUsername = parsed.adminUsername || '';
+  elements.apiBaseUrl.value = appState.apiBaseUrl;
+  elements.adminUsername.value = appState.adminUsername || runtimeConfig.adminUsername || 'admin';
 }
 
 function setLoggedIn(isLoggedIn) {
   elements.loginPanel.hidden = isLoggedIn;
   elements.dashboardPanel.hidden = !isLoggedIn;
-  elements.crudPanel.hidden = !isLoggedIn;
+  elements.workspacePanel.hidden = !isLoggedIn;
   elements.manualPushPanel.hidden = !isLoggedIn;
-  elements.resourcesPanel.hidden = !isLoggedIn;
   elements.logoutButton.hidden = !isLoggedIn;
 }
 
-async function apiRequest(path, options = {}) {
-  const response = await fetch(`${state.apiBaseUrl}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-      ...(options.headers || {}),
-    },
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.message || '요청에 실패했습니다.');
+function currentStock() {
+  return appState.data.stocks.find((item) => item.id === appState.ui.selectedStockId) || null;
+}
+
+function currentLevelStock() {
+  return appState.data.stocks.find((item) => item.id === appState.ui.selectedLevelStockId) || null;
+}
+
+function renderAll() {
+  if (appState.data.session && appState.data.dashboard) {
+    renderStats(elements.dashboardStats, appState.data.session, appState.data.dashboard);
   }
-  return data;
-}
 
-function renderJson(element, payload) {
-  element.textContent = JSON.stringify(payload, null, 2);
-}
+  const stockResults = byText(appState.data.stocks, elements.stockSearchInput.value || '', ['code', 'name']).slice(0, 12);
+  renderStockSearchResults(elements.stockSearchResults, stockResults, appState.ui.selectedStockId);
+  renderStockSummary(
+    elements.selectedStockSummary,
+    currentStock(),
+    appState.data.homeFeatured.map((item) => item.stock_id),
+  );
 
-function renderStats(sessionData, dashboard) {
-  const stats = [
-    ['관리자', sessionData.admin_username],
-    ['권한', sessionData.role],
-    ['활성 종목 수', dashboard.stock_count],
-    ['오늘 신호 수', dashboard.signal_event_count],
-    ['공개 콘텐츠 수', dashboard.content_count],
-    ['INVALID 수', dashboard.invalid_count],
-    ['REUSABLE 수', dashboard.reusable_count],
-    ['수동 푸시 로그', dashboard.push_queue_count],
-  ];
-  elements.dashboardStats.innerHTML = stats
-    .map(([label, value]) => `<div class="stat-card"><span class="stat-label">${label}</span><span class="stat-value">${value}</span></div>`)
-    .join('');
+  const levelResults = byText(appState.data.stocks, elements.levelStockSearchInput.value || '', ['code', 'name']).slice(0, 12);
+  renderStockSearchResults(elements.levelStockSearchResults, levelResults, appState.ui.selectedLevelStockId);
+  const selectedLevelStock = currentLevelStock();
+  renderStockSummary(elements.levelStockSummary, selectedLevelStock);
+  const levelItems = appState.data.priceLevels.filter((item) => item.stock_id === appState.ui.selectedLevelStockId);
+  renderPriceLevels(elements.supportLevelsList, levelItems, 'SUPPORT');
+  renderPriceLevels(elements.resistanceLevelsList, levelItems, 'RESISTANCE');
+
+  const stateFiltered = appState.data.supportStates.filter((item) => {
+    const statusOk = elements.stateStatusFilter.value === 'ALL' || item.status === elements.stateStatusFilter.value;
+    const q = (elements.stateSearchInput.value || '').trim().toLowerCase();
+    const searchOk = !q || `${item.stock_name} ${item.stock_code}`.toLowerCase().includes(q);
+    return statusOk && searchOk;
+  });
+  renderSupportStatesTable(elements.supportStatesTable, stateFiltered);
+
+  const featuredResults = byText(appState.data.stocks, elements.featuredSearchInput.value || '', ['code', 'name']).slice(0, 8);
+  renderStockSearchResults(elements.featuredSearchResults, featuredResults, null);
+  renderFeaturedItems(elements.featuredItemsList, appState.ui.featuredDraft);
+
+  renderThemeOptions(elements.themeSelect, appState.data.themes, appState.ui.selectedThemeId);
+  const themeSearchResults = byText(appState.data.stocks, elements.themeStockSearchInput.value || '', ['code', 'name']).slice(0, 8);
+  renderStockSearchResults(elements.themeStockSearchResults, themeSearchResults, null);
+  renderThemeStockList(elements.themeStockList, appState.ui.themeStockDraft);
+
+  renderContentOptions(elements.contentSelect, appState.data.contents, appState.ui.selectedContentId);
+  const contentStockResults = byText(appState.data.stocks, elements.contentStockSearchInput.value || '', ['code', 'name']).slice(0, 8);
+  renderStockSearchResults(elements.contentStockSearchResults, contentStockResults, null);
+  const contentThemeResults = byText(appState.data.themes, elements.contentThemeSearchInput.value || '', ['name', 'summary']).slice(0, 8);
+  renderThemeSearchResults(elements.contentThemeSearchResults, contentThemeResults);
+
+  const selectedContentStock = appState.data.stocks.find((item) => item.id === appState.ui.selectedContentStockId);
+  const selectedContentTheme = appState.data.themes.find((item) => item.id === appState.ui.selectedContentThemeId);
+  renderSelectionSummary(
+    elements.contentStockSummary,
+    selectedContentStock ? `${selectedContentStock.name} (${selectedContentStock.code})` : '',
+  );
+  renderSelectionSummary(
+    elements.contentThemeSummary,
+    selectedContentTheme ? `${selectedContentTheme.name}${selectedContentTheme.summary ? ` · ${selectedContentTheme.summary}` : ''}` : '',
+  );
 }
 
 async function refreshAll() {
-  const [sessionRes, dashboardRes, stocksRes, levelsRes, statesRes, eventsRes, featuredRes, themesRes, contentsRes, logsRes] = await Promise.all([
-    apiRequest('/admin/auth/me'),
-    apiRequest('/admin/dashboard'),
-    apiRequest('/admin/stocks'),
-    apiRequest('/admin/price-levels'),
-    apiRequest('/admin/support-states'),
-    apiRequest('/admin/signal-events'),
-    apiRequest('/admin/home-featured'),
-    apiRequest('/admin/themes'),
-    apiRequest('/admin/contents'),
-    apiRequest('/admin/audit-logs'),
+  const [sessionRes, dashboardRes, stocksRes, levelsRes, statesRes, featuredRes, themesRes, contentsRes] = await Promise.all([
+    apiRequest(appState, '/admin/auth/me'),
+    apiRequest(appState, '/admin/dashboard'),
+    apiRequest(appState, '/admin/stocks'),
+    apiRequest(appState, '/admin/price-levels'),
+    apiRequest(appState, '/admin/support-states'),
+    apiRequest(appState, '/admin/home-featured'),
+    apiRequest(appState, '/admin/themes'),
+    apiRequest(appState, '/admin/contents'),
   ]);
-  renderStats(sessionRes.data, dashboardRes.data);
-  renderJson(elements.stocksOutput, stocksRes.data);
-  renderJson(elements.levelsOutput, levelsRes.data);
-  renderJson(elements.statesOutput, statesRes.data);
-  renderJson(elements.eventsOutput, eventsRes.data);
-  renderJson(elements.featuredOutput, featuredRes.data);
-  renderJson(elements.themesOutput, themesRes.data);
-  renderJson(elements.contentsOutput, contentsRes.data);
-  renderJson(elements.logsOutput, logsRes.data.items);
+
+  appState.data.session = sessionRes.data;
+  appState.data.dashboard = dashboardRes.data;
+  appState.data.stocks = stocksRes.data;
+  appState.data.priceLevels = levelsRes.data;
+  appState.data.supportStates = statesRes.data;
+  appState.data.homeFeatured = featuredRes.data;
+  appState.data.themes = themesRes.data;
+  appState.data.contents = contentsRes.data;
+
+  appState.ui.featuredDraft = featuredRes.data.map((item) => ({
+    stock_id: item.stock_id,
+    stock_name: item.stock_name,
+    stock_code: item.stock_code,
+    is_active: item.is_active,
+    display_order: item.display_order,
+  }));
+
+  if (appState.ui.selectedThemeId) {
+    hydrateThemeDraft(appState.ui.selectedThemeId);
+  }
+  if (appState.ui.selectedContentId) {
+    hydrateContentDraft(appState.ui.selectedContentId);
+  }
+  renderAll();
 }
 
-function parseBooleanText(value) {
-  return ['true', '1', 'y', 'yes'].includes(String(value).trim().toLowerCase());
+function fillStockForm(stock = null) {
+  appState.ui.selectedStockId = stock?.id || null;
+  elements.stockCode.value = stock?.code || '';
+  elements.stockName.value = stock?.name || '';
+  elements.stockMarketType.value = stock?.market_type || 'KOSPI';
+  elements.stockSector.value = stock?.sector || '';
+  elements.stockThemeTags.value = stock?.theme_tags || '';
+  elements.stockMemo.value = stock?.operator_memo || '';
+  elements.stockActive.checked = stock?.is_active ?? true;
+  renderAll();
 }
 
-function parseCsvLines(text, mapper) {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => mapper(line.split(',').map((item) => item.trim())));
+function hydrateThemeDraft(themeId) {
+  const theme = appState.data.themes.find((item) => item.id === Number(themeId));
+  appState.ui.selectedThemeId = theme ? theme.id : null;
+  elements.themeName.value = theme?.name || '';
+  elements.themeScore.value = theme?.score || '';
+  elements.themeSummary.value = theme?.summary || '';
+  elements.themeActive.checked = theme?.is_active ?? true;
+  appState.ui.themeStockDraft = (theme?.stocks || []).map((item) => ({ ...item }));
+  renderAll();
+}
+
+function hydrateContentDraft(contentId) {
+  const content = appState.data.contents.find((item) => item.id === Number(contentId));
+  appState.ui.selectedContentId = content ? content.id : null;
+  elements.contentCategory.value = content?.category || 'SHORTS';
+  elements.contentTitle.value = content?.title || '';
+  elements.contentSummary.value = content?.summary || '';
+  elements.contentUrl.value = content?.external_url || '';
+  elements.contentThumbnailUrl.value = content?.thumbnail_url || '';
+  elements.contentSortOrder.value = String(content?.sort_order ?? 0);
+  elements.contentPublishedAt.value = content?.published_at || '';
+  elements.contentPublished.checked = content?.is_published ?? true;
+  appState.ui.selectedContentStockId = content?.stock_id || null;
+  appState.ui.selectedContentThemeId = content?.theme_id || null;
+  renderAll();
 }
 
 async function login() {
-  state.apiBaseUrl = elements.apiBaseUrl.value.trim().replace(/\/$/, '');
-  const username = elements.adminUsername.value.trim();
-  const password = elements.adminPassword.value;
-  const response = await fetch(`${state.apiBaseUrl}/admin/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload.message || '로그인에 실패했습니다.');
-  }
-  state.token = payload.data.access_token;
-  state.adminUsername = payload.data.admin_username;
+  appState.apiBaseUrl = elements.apiBaseUrl.value.trim().replace(/\/$/, '');
+  const payload = await loginRequest(appState.apiBaseUrl, elements.adminUsername.value.trim(), elements.adminPassword.value);
+  appState.token = payload.data.access_token;
+  appState.adminUsername = payload.data.admin_username;
   persistSession();
   setLoggedIn(true);
-  elements.loginMessage.textContent = '로그인 성공. 관리자 데이터를 불러옵니다.';
+  setMessage(elements.loginMessage, '로그인 성공. 관리자 데이터를 불러옵니다.');
   await refreshAll();
 }
 
 async function saveStock() {
-  const stockId = elements.stockId.value.trim();
   const payload = {
     code: elements.stockCode.value.trim(),
     name: elements.stockName.value.trim(),
@@ -224,67 +271,108 @@ async function saveStock() {
     operator_memo: elements.stockMemo.value.trim() || null,
     is_active: elements.stockActive.checked,
   };
-  const path = stockId ? `/admin/stocks/${stockId}` : '/admin/stocks';
-  const method = stockId ? 'PUT' : 'POST';
-  const response = await apiRequest(path, { method, body: JSON.stringify(payload) });
-  elements.stockFormMessage.textContent = response.message;
+  const path = appState.ui.selectedStockId ? `/admin/stocks/${appState.ui.selectedStockId}` : '/admin/stocks';
+  const method = appState.ui.selectedStockId ? 'PUT' : 'POST';
+  const response = await apiRequest(appState, path, { method, body: JSON.stringify(payload) });
+  setMessage(elements.stockFormMessage, response.message, 'success');
+  await refreshAll();
+  const savedStock = appState.data.stocks.find((item) => item.id === response.data.id) || null;
+  fillStockForm(savedStock);
+}
+
+async function savePriceLevel() {
+  if (!appState.ui.selectedLevelStockId) {
+    throw new Error('먼저 종목을 선택해주세요.');
+  }
+  const payload = {
+    stock_id: appState.ui.selectedLevelStockId,
+    level_type: elements.priceLevelType.value,
+    price: elements.priceLevelPrice.value.trim(),
+    proximity_threshold_pct: elements.priceLevelProximity.value.trim() || '1.50',
+    rebound_threshold_pct: elements.priceLevelRebound.value.trim() || '5.00',
+    source_label: elements.priceLevelSource.value,
+    note: elements.priceLevelNote.value.trim() || null,
+    is_active: true,
+  };
+  const response = await apiRequest(appState, '/admin/price-levels', { method: 'POST', body: JSON.stringify(payload) });
+  setMessage(elements.priceLevelMessage, response.message, 'success');
+  elements.priceLevelPrice.value = '';
+  elements.priceLevelNote.value = '';
+  await refreshAll();
+}
+
+async function togglePriceLevel(levelId, nextActive) {
+  const current = appState.data.priceLevels.find((item) => item.id === Number(levelId));
+  if (!current) {
+    return;
+  }
+  const payload = {
+    stock_id: current.stock_id,
+    level_type: current.level_type,
+    price: current.price,
+    proximity_threshold_pct: current.proximity_threshold_pct,
+    rebound_threshold_pct: current.rebound_threshold_pct,
+    source_label: current.source_label,
+    note: current.note,
+    is_active: nextActive === 'true',
+  };
+  await apiRequest(appState, `/admin/price-levels/${levelId}`, { method: 'PUT', body: JSON.stringify(payload) });
   await refreshAll();
 }
 
 async function saveFeatured() {
-  const items = parseCsvLines(elements.featuredItems.value, ([stockId, displayOrder, isActive]) => ({
-    stock_id: Number(stockId),
-    display_order: Number(displayOrder || 0),
-    is_active: parseBooleanText(isActive ?? 'true'),
+  const items = appState.ui.featuredDraft.map((item, index) => ({
+    stock_id: item.stock_id,
+    display_order: index + 1,
+    is_active: item.is_active,
   }));
-  const response = await apiRequest('/admin/home-featured', {
+  const response = await apiRequest(appState, '/admin/home-featured', {
     method: 'PUT',
     body: JSON.stringify({ items }),
   });
-  elements.featuredFormMessage.textContent = response.message;
+  setMessage(elements.featuredFormMessage, response.message, 'success');
   await refreshAll();
 }
 
 async function saveTheme() {
-  const themeId = elements.themeId.value.trim();
-  const stocks = parseCsvLines(elements.themeStocks.value, ([stockId, roleType, score]) => ({
-    stock_id: Number(stockId),
-    role_type: roleType || 'FOLLOWER',
-    score: score ? Number(score) : null,
-  }));
   const payload = {
     name: elements.themeName.value.trim(),
-    score: elements.themeScore.value.trim() ? Number(elements.themeScore.value.trim()) : null,
+    score: numberOrNull(elements.themeScore.value),
     summary: elements.themeSummary.value.trim() || null,
     is_active: elements.themeActive.checked,
-    stocks,
+    stocks: appState.ui.themeStockDraft.map((item) => ({
+      stock_id: item.stock_id,
+      role_type: item.role_type,
+      score: numberOrNull(item.score),
+    })),
   };
-  const path = themeId ? `/admin/themes/${themeId}` : '/admin/themes';
-  const method = themeId ? 'PUT' : 'POST';
-  const response = await apiRequest(path, { method, body: JSON.stringify(payload) });
-  elements.themeFormMessage.textContent = response.message;
+  const path = appState.ui.selectedThemeId ? `/admin/themes/${appState.ui.selectedThemeId}` : '/admin/themes';
+  const method = appState.ui.selectedThemeId ? 'PUT' : 'POST';
+  const response = await apiRequest(appState, path, { method, body: JSON.stringify(payload) });
+  setMessage(elements.themeFormMessage, response.message, 'success');
   await refreshAll();
+  hydrateThemeDraft(response.data.id);
 }
 
 async function saveContent() {
-  const contentId = elements.contentId.value.trim();
   const payload = {
-    category: elements.contentCategory.value.trim(),
+    category: elements.contentCategory.value,
     title: elements.contentTitle.value.trim(),
     summary: elements.contentSummary.value.trim() || null,
     external_url: elements.contentUrl.value.trim() || null,
     thumbnail_url: elements.contentThumbnailUrl.value.trim() || null,
-    stock_id: elements.contentStockId.value.trim() ? Number(elements.contentStockId.value.trim()) : null,
-    theme_id: elements.contentThemeId.value.trim() ? Number(elements.contentThemeId.value.trim()) : null,
+    stock_id: appState.ui.selectedContentStockId,
+    theme_id: appState.ui.selectedContentThemeId,
     sort_order: Number(elements.contentSortOrder.value.trim() || 0),
     published_at: elements.contentPublishedAt.value.trim() || null,
     is_published: elements.contentPublished.checked,
   };
-  const path = contentId ? `/admin/contents/${contentId}` : '/admin/contents';
-  const method = contentId ? 'PUT' : 'POST';
-  const response = await apiRequest(path, { method, body: JSON.stringify(payload) });
-  elements.contentFormMessage.textContent = response.message;
+  const path = appState.ui.selectedContentId ? `/admin/contents/${appState.ui.selectedContentId}` : '/admin/contents';
+  const method = appState.ui.selectedContentId ? 'PUT' : 'POST';
+  const response = await apiRequest(appState, path, { method, body: JSON.stringify(payload) });
+  setMessage(elements.contentFormMessage, response.message, 'success');
   await refreshAll();
+  hydrateContentDraft(response.data.id);
 }
 
 async function sendManualPush() {
@@ -295,93 +383,267 @@ async function sendManualPush() {
     message: elements.pushMessage.value.trim(),
     memo: elements.pushMemo.value.trim(),
   };
-  const response = await apiRequest('/admin/manual-push', {
+  const response = await apiRequest(appState, '/admin/manual-push', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
-  elements.pushMessageStatus.textContent = response.message;
+  setMessage(elements.pushMessageStatus, response.message, 'success');
+}
+
+async function submitStateForceUpdate() {
+  if (!appState.ui.stateForceTarget) {
+    throw new Error('수정할 상태를 먼저 선택해주세요.');
+  }
+  const response = await apiRequest(
+    appState,
+    `/admin/support-states/${appState.ui.stateForceTarget.id}/force`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: elements.stateForceStatus.value,
+        memo: elements.stateForceMemo.value.trim(),
+        status_reason: elements.stateForceReason.value.trim() || null,
+        invalid_reason: elements.stateForceInvalidReason.value.trim() || null,
+      }),
+    },
+  );
+  setMessage(elements.stateForceMessage, response.message, 'success');
   await refreshAll();
+  closeStateModal();
 }
 
-function logout() {
-  localStorage.removeItem(storageKey);
-  state.token = '';
-  state.adminUsername = '';
-  setLoggedIn(false);
-  elements.loginMessage.textContent = '로그아웃했습니다.';
+function closeStateModal() {
+  elements.stateForceModal.hidden = true;
+  appState.ui.stateForceTarget = null;
+  elements.stateForceMemo.value = '';
+  elements.stateForceReason.value = '';
+  elements.stateForceInvalidReason.value = '';
+  setMessage(elements.stateForceMessage, '');
 }
 
-elements.loginButton.addEventListener('click', async () => {
-  elements.loginMessage.textContent = '';
-  try {
-    await login();
-  } catch (error) {
-    elements.loginMessage.textContent = error.message;
+function openStateModal(stateId) {
+  const target = appState.data.supportStates.find((item) => item.id === Number(stateId));
+  if (!target) {
+    return;
   }
-});
+  appState.ui.stateForceTarget = target;
+  elements.stateForceTarget.textContent = `${target.stock_name} (${target.stock_code}) · ${target.level_price} · 현재 ${target.status}`;
+  elements.stateForceStatus.value = target.status;
+  elements.stateForceModal.hidden = false;
+}
 
-elements.logoutButton.addEventListener('click', logout);
-elements.refreshButton.addEventListener('click', async () => {
-  try {
-    await refreshAll();
-  } catch (error) {
-    elements.loginMessage.textContent = error.message;
-  }
-});
-
-elements.saveStockButton.addEventListener('click', async () => {
-  elements.stockFormMessage.textContent = '';
-  try {
-    await saveStock();
-  } catch (error) {
-    elements.stockFormMessage.textContent = error.message;
-  }
-});
-
-elements.saveFeaturedButton.addEventListener('click', async () => {
-  elements.featuredFormMessage.textContent = '';
-  try {
-    await saveFeatured();
-  } catch (error) {
-    elements.featuredFormMessage.textContent = error.message;
-  }
-});
-
-elements.saveThemeButton.addEventListener('click', async () => {
-  elements.themeFormMessage.textContent = '';
-  try {
-    await saveTheme();
-  } catch (error) {
-    elements.themeFormMessage.textContent = error.message;
-  }
-});
-
-elements.saveContentButton.addEventListener('click', async () => {
-  elements.contentFormMessage.textContent = '';
-  try {
-    await saveContent();
-  } catch (error) {
-    elements.contentFormMessage.textContent = error.message;
-  }
-});
-
-elements.pushButton.addEventListener('click', async () => {
-  elements.pushMessageStatus.textContent = '';
-  try {
-    await sendManualPush();
-  } catch (error) {
-    elements.pushMessageStatus.textContent = error.message;
-  }
-});
-
-loadSession();
-if (state.token) {
-  setLoggedIn(true);
-  refreshAll().catch((error) => {
-    elements.loginMessage.textContent = error.message;
-    logout();
+function wireTabNavigation() {
+  elements.tabNav.addEventListener('click', (event) => {
+    const button = event.target.closest('.tab-button');
+    if (!button) {
+      return;
+    }
+    document.querySelectorAll('.tab-button').forEach((item) => item.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((item) => item.classList.remove('active'));
+    button.classList.add('active');
+    document.getElementById(button.dataset.tab).classList.add('active');
   });
-} else {
-  setLoggedIn(false);
 }
 
+function bindSearchReRendering() {
+  [
+    elements.stockSearchInput,
+    elements.levelStockSearchInput,
+    elements.stateSearchInput,
+    elements.featuredSearchInput,
+    elements.themeStockSearchInput,
+    elements.contentStockSearchInput,
+    elements.contentThemeSearchInput,
+    elements.stateStatusFilter,
+  ].forEach((input) => input.addEventListener('input', renderAll));
+  elements.stateStatusFilter.addEventListener('change', renderAll);
+}
+
+function bindDelegatedClicks() {
+  document.body.addEventListener('click', async (event) => {
+    const stockItem = event.target.closest('[data-stock-id]');
+    if (stockItem && stockItem.classList.contains('selection-item')) {
+      const stock = appState.data.stocks.find((item) => item.id === Number(stockItem.dataset.stockId));
+      if (stockItem.parentElement === elements.stockSearchResults) {
+        fillStockForm(stock);
+      } else if (stockItem.parentElement === elements.levelStockSearchResults) {
+        appState.ui.selectedLevelStockId = stock?.id || null;
+        renderAll();
+      } else if (stockItem.parentElement === elements.featuredSearchResults) {
+        if (stock && !appState.ui.featuredDraft.some((item) => item.stock_id === stock.id)) {
+          appState.ui.featuredDraft.push({ stock_id: stock.id, stock_name: stock.name, stock_code: stock.code, is_active: true });
+          renderAll();
+        }
+      } else if (stockItem.parentElement === elements.themeStockSearchResults) {
+        if (stock && !appState.ui.themeStockDraft.some((item) => item.stock_id === stock.id)) {
+          appState.ui.themeStockDraft.push({ stock_id: stock.id, stock_name: stock.name, role_type: 'FOLLOWER', score: '' });
+          renderAll();
+        }
+      } else if (stockItem.parentElement === elements.contentStockSearchResults) {
+        appState.ui.selectedContentStockId = stock?.id || null;
+        renderAll();
+      }
+      return;
+    }
+
+    const themeItem = event.target.closest('[data-theme-id]');
+    if (themeItem && themeItem.parentElement === elements.contentThemeSearchResults) {
+      appState.ui.selectedContentThemeId = Number(themeItem.dataset.themeId);
+      renderAll();
+      return;
+    }
+
+    if (event.target.matches('[data-level-toggle-id]')) {
+      await togglePriceLevel(event.target.dataset.levelToggleId, event.target.dataset.nextActive);
+      return;
+    }
+    if (event.target.matches('[data-force-state-id]')) {
+      openStateModal(event.target.dataset.forceStateId);
+      return;
+    }
+    if (event.target.matches('[data-featured-remove]')) {
+      appState.ui.featuredDraft = appState.ui.featuredDraft.filter((item) => item.stock_id !== Number(event.target.dataset.featuredRemove));
+      renderAll();
+      return;
+    }
+    if (event.target.matches('[data-featured-toggle]')) {
+      const item = appState.ui.featuredDraft.find((entry) => entry.stock_id === Number(event.target.dataset.featuredToggle));
+      if (item) {
+        item.is_active = !item.is_active;
+      }
+      renderAll();
+      return;
+    }
+    if (event.target.matches('[data-featured-move]')) {
+      const stockId = Number(event.target.dataset.stockId);
+      const index = appState.ui.featuredDraft.findIndex((item) => item.stock_id === stockId);
+      const direction = event.target.dataset.featuredMove;
+      const swapIndex = direction === 'up' ? index - 1 : index + 1;
+      if (index >= 0 && appState.ui.featuredDraft[swapIndex]) {
+        [appState.ui.featuredDraft[index], appState.ui.featuredDraft[swapIndex]] = [appState.ui.featuredDraft[swapIndex], appState.ui.featuredDraft[index]];
+      }
+      renderAll();
+      return;
+    }
+    if (event.target.matches('[data-theme-stock-remove]')) {
+      appState.ui.themeStockDraft = appState.ui.themeStockDraft.filter((item) => item.stock_id !== Number(event.target.dataset.themeStockRemove));
+      renderAll();
+    }
+  });
+
+  document.body.addEventListener('change', (event) => {
+    if (event.target.matches('[data-theme-stock-role]')) {
+      const target = appState.ui.themeStockDraft.find((item) => item.stock_id === Number(event.target.dataset.themeStockRole));
+      if (target) {
+        target.role_type = event.target.value;
+      }
+    }
+    if (event.target.matches('[data-theme-stock-score]')) {
+      const target = appState.ui.themeStockDraft.find((item) => item.stock_id === Number(event.target.dataset.themeStockScore));
+      if (target) {
+        target.score = event.target.value;
+      }
+    }
+  });
+}
+
+function bindPrimaryActions() {
+  elements.loginButton.addEventListener('click', async () => {
+    try {
+      await login();
+    } catch (error) {
+      setMessage(elements.loginMessage, error.message, 'error');
+    }
+  });
+  elements.logoutButton.addEventListener('click', () => {
+    localStorage.removeItem(storageKey);
+    appState.token = '';
+    setLoggedIn(false);
+    setMessage(elements.loginMessage, '로그아웃했습니다.');
+  });
+  elements.refreshButton.addEventListener('click', async () => {
+    try {
+      await refreshAll();
+    } catch (error) {
+      setMessage(elements.loginMessage, error.message, 'error');
+    }
+  });
+  elements.saveStockButton.addEventListener('click', async () => {
+    try {
+      await saveStock();
+    } catch (error) {
+      setMessage(elements.stockFormMessage, error.message, 'error');
+    }
+  });
+  elements.resetStockButton.addEventListener('click', () => fillStockForm(null));
+  elements.stockCreateNewButton.addEventListener('click', () => fillStockForm(null));
+  elements.savePriceLevelButton.addEventListener('click', async () => {
+    try {
+      await savePriceLevel();
+    } catch (error) {
+      setMessage(elements.priceLevelMessage, error.message, 'error');
+    }
+  });
+  elements.saveFeaturedButton.addEventListener('click', async () => {
+    try {
+      await saveFeatured();
+    } catch (error) {
+      setMessage(elements.featuredFormMessage, error.message, 'error');
+    }
+  });
+  elements.themeSelect.addEventListener('change', () => hydrateThemeDraft(elements.themeSelect.value));
+  elements.themeCreateNewButton.addEventListener('click', () => hydrateThemeDraft(null));
+  elements.saveThemeButton.addEventListener('click', async () => {
+    try {
+      await saveTheme();
+    } catch (error) {
+      setMessage(elements.themeFormMessage, error.message, 'error');
+    }
+  });
+  elements.contentSelect.addEventListener('change', () => hydrateContentDraft(elements.contentSelect.value));
+  elements.contentCreateNewButton.addEventListener('click', () => hydrateContentDraft(null));
+  elements.saveContentButton.addEventListener('click', async () => {
+    try {
+      await saveContent();
+    } catch (error) {
+      setMessage(elements.contentFormMessage, error.message, 'error');
+    }
+  });
+  elements.pushButton.addEventListener('click', async () => {
+    try {
+      await sendManualPush();
+    } catch (error) {
+      setMessage(elements.pushMessageStatus, error.message, 'error');
+    }
+  });
+  elements.submitStateForceButton.addEventListener('click', async () => {
+    try {
+      await submitStateForceUpdate();
+    } catch (error) {
+      setMessage(elements.stateForceMessage, error.message, 'error');
+    }
+  });
+  elements.cancelStateForceButton.addEventListener('click', closeStateModal);
+  elements.closeStateModalButton.addEventListener('click', closeStateModal);
+}
+
+async function bootstrap() {
+  loadSession();
+  wireTabNavigation();
+  bindSearchReRendering();
+  bindDelegatedClicks();
+  bindPrimaryActions();
+  if (appState.token) {
+    setLoggedIn(true);
+    try {
+      await refreshAll();
+    } catch (error) {
+      localStorage.removeItem(storageKey);
+      appState.token = '';
+      setLoggedIn(false);
+      setMessage(elements.loginMessage, `세션을 복원하지 못했습니다: ${error.message}`, 'error');
+    }
+  }
+}
+
+bootstrap();
