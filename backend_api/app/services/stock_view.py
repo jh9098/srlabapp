@@ -155,11 +155,12 @@ class StockViewService:
     def get_stock_detail(self, stock_code: str, user_identifier: str | None = None) -> StockDetailResponseData:
         stock = self._get_stock_or_raise(stock_code)
         latest_bar = self._get_latest_bar(stock)
-        primary_state = self._select_primary_support_state(stock.support_states)
-        status = self._build_status_badge(primary_state.status)
+        primary_state = self._select_primary_support_state_or_none(stock.support_states)
+        effective_status = primary_state.status if primary_state else SupportStatus.WAITING
+        status = self._build_status_badge(effective_status)
         levels = self._build_levels(stock.price_levels, latest_bar.close_price)
         watchlist = self._build_watchlist_summary(stock, user_identifier)
-        scenario_base, scenario_bull, scenario_bear = SCENARIO_TEXT[primary_state.status]
+        scenario_base, scenario_bull, scenario_bear = SCENARIO_TEXT[effective_status]
 
         return StockDetailResponseData(
             stock=StockSummary(stock_code=stock.code, stock_name=stock.name, market_type=stock.market_type.value),
@@ -175,13 +176,13 @@ class StockViewService:
             status=status,
             levels=levels,
             support_state=SupportStateSummary(
-                status=primary_state.status.value,
-                reaction_type=self._reaction_type(primary_state.status),
-                first_touched_at=primary_state.first_touched_at or primary_state.last_evaluated_at,
-                rebound_pct=self._calculate_rebound_pct(primary_state),
+                status=effective_status.value,
+                reaction_type=self._reaction_type(effective_status),
+                first_touched_at=(primary_state.first_touched_at or primary_state.last_evaluated_at) if primary_state else None,
+                rebound_pct=self._calculate_rebound_pct(primary_state) if primary_state else None,
             ),
             scenario=ScenarioSummary(base=scenario_base, bull=scenario_bull, bear=scenario_bear),
-            reason_lines=REASON_LINES[primary_state.status],
+            reason_lines=REASON_LINES[effective_status],
             chart=StockChartSummary(
                 daily_bars=[
                     DailyBarItem(
@@ -471,5 +472,7 @@ class StockViewService:
             return "BREAK_REBOUND"
         return None
 
-    def _state_time(self, support_state: SupportState, latest_bar: DailyBar):
+    def _state_time(self, support_state: SupportState | None, latest_bar: DailyBar):
+        if support_state is None:
+            return latest_bar.updated_at
         return support_state.last_evaluated_at or latest_bar.updated_at
