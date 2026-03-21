@@ -1,13 +1,12 @@
 import { apiRequest, loginRequest } from './api.js';
 import {
   renderContentOptions,
-  renderFeaturedItems,
+  renderHomeWatchlistItems,
   renderPriceLevels,
   renderSelectionSummary,
   renderStats,
   renderStockSearchResults,
   renderStockSummary,
-  renderSupportStatesTable,
   renderThemeOptions,
   renderThemeSearchResults,
   renderThemeStockList,
@@ -16,6 +15,7 @@ import { byText, numberOrNull, setMessage } from './utils.js';
 
 const storageKey = 'srlab-admin-session';
 const runtimeConfig = window.__SRLAB_ADMIN_CONFIG__ || {};
+const HOME_SOURCE_LABEL = 'admin_home';
 
 function detectDefaultApiBaseUrl() {
   if (runtimeConfig.apiBaseUrl) {
@@ -38,43 +38,37 @@ const appState = {
     dashboard: null,
     stocks: [],
     priceLevels: [],
-    supportStates: [],
     homeFeatured: [],
     themes: [],
     contents: [],
   },
   ui: {
-    selectedStockId: null,
+    selectedHomeStockId: null,
+    editingFeaturedStockId: null,
     selectedLevelStockId: null,
-    featuredDraft: [],
     selectedThemeId: null,
     themeStockDraft: [],
     selectedContentId: null,
     selectedContentStockId: null,
     selectedContentThemeId: null,
-    stateForceTarget: null,
   },
 };
 
 const ids = [
   'apiBaseUrl', 'adminUsername', 'adminPassword', 'loginButton', 'logoutButton', 'loginMessage',
   'loginPanel', 'dashboardPanel', 'dashboardStats', 'workspacePanel', 'manualPushPanel', 'refreshButton',
-  'stockSearchInput', 'stockSearchResults', 'stockCode', 'stockName', 'stockMarketType', 'stockSector',
-  'stockThemeTags', 'stockMemo', 'stockActive', 'saveStockButton', 'resetStockButton', 'stockCreateNewButton',
-  'stockFormMessage', 'selectedStockSummary', 'levelStockSearchInput', 'levelStockSearchResults',
-  'levelStockSummary', 'priceLevelType', 'priceLevelPrice', 'priceLevelProximity', 'priceLevelRebound',
-  'priceLevelSource', 'priceLevelNote', 'savePriceLevelButton', 'priceLevelMessage', 'supportLevelsList',
-  'resistanceLevelsList', 'stateStatusFilter', 'stateSearchInput', 'supportStatesTable', 'featuredSearchInput',
-  'featuredSearchResults', 'featuredItemsList', 'saveFeaturedButton', 'featuredFormMessage', 'themeSelect',
-  'themeName', 'themeScore', 'themeSummary', 'themeActive', 'themeStockSearchInput', 'themeStockSearchResults',
-  'themeStockList', 'saveThemeButton', 'themeFormMessage', 'themeCreateNewButton', 'contentSelect',
-  'contentCategory', 'contentTitle', 'contentSummary', 'contentUrl', 'contentThumbnailUrl', 'contentSortOrder',
-  'contentPublishedAt', 'contentPublished', 'contentStockSearchInput', 'contentStockSearchResults',
-  'contentStockSummary', 'contentThemeSearchInput', 'contentThemeSearchResults', 'contentThemeSummary',
-  'saveContentButton', 'contentFormMessage', 'contentCreateNewButton', 'pushUserIdentifier', 'pushTargetPath',
-  'pushTitle', 'pushMemo', 'pushMessage', 'pushButton', 'pushMessageStatus', 'stateForceModal',
-  'stateForceTarget', 'stateForceStatus', 'stateForceMemo', 'stateForceReason', 'stateForceInvalidReason',
-  'submitStateForceButton', 'cancelStateForceButton', 'closeStateModalButton', 'stateForceMessage', 'tabNav',
+  'homeStockSearchInput', 'homeStockSearchResults', 'selectedHomeStockSummary', 'homeSupportPrice', 'homeComment',
+  'saveHomeWatchlistButton', 'resetHomeWatchlistButton', 'homeWatchlistMessage', 'homeWatchlistList',
+  'levelStockSearchInput', 'levelStockSearchResults', 'levelStockSummary', 'priceLevelType', 'priceLevelPrice',
+  'priceLevelProximity', 'priceLevelRebound', 'priceLevelSource', 'priceLevelNote', 'savePriceLevelButton',
+  'priceLevelMessage', 'supportLevelsList', 'resistanceLevelsList', 'themeSelect', 'themeName', 'themeScore',
+  'themeSummary', 'themeActive', 'themeStockSearchInput', 'themeStockSearchResults', 'themeStockList',
+  'saveThemeButton', 'themeFormMessage', 'themeCreateNewButton', 'contentSelect', 'contentCategory', 'contentTitle',
+  'contentSummary', 'contentUrl', 'contentThumbnailUrl', 'contentSortOrder', 'contentPublishedAt', 'contentPublished',
+  'contentStockSearchInput', 'contentStockSearchResults', 'contentStockSummary', 'contentThemeSearchInput',
+  'contentThemeSearchResults', 'contentThemeSummary', 'saveContentButton', 'contentFormMessage',
+  'contentCreateNewButton', 'pushUserIdentifier', 'pushTargetPath', 'pushTitle', 'pushMemo', 'pushMessage',
+  'pushButton', 'pushMessageStatus', 'tabNav',
 ];
 const elements = Object.fromEntries(ids.map((id) => [id, document.getElementById(id)]));
 
@@ -109,12 +103,36 @@ function setLoggedIn(isLoggedIn) {
   elements.logoutButton.hidden = !isLoggedIn;
 }
 
-function currentStock() {
-  return appState.data.stocks.find((item) => item.id === appState.ui.selectedStockId) || null;
+function currentHomeStock() {
+  return appState.data.stocks.find((item) => item.id === appState.ui.selectedHomeStockId) || null;
 }
 
 function currentLevelStock() {
   return appState.data.stocks.find((item) => item.id === appState.ui.selectedLevelStockId) || null;
+}
+
+function getAdminHomeSupportLevel(stockId) {
+  return appState.data.priceLevels.find(
+    (item) => item.stock_id === stockId && item.level_type === 'SUPPORT' && item.source_label === HOME_SOURCE_LABEL && item.is_active,
+  ) || null;
+}
+
+function buildHomeWatchlistItems() {
+  return [...appState.data.homeFeatured]
+    .filter((item) => item.is_active)
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((item) => {
+      const supportLevel = getAdminHomeSupportLevel(item.stock_id);
+      const stock = appState.data.stocks.find((entry) => entry.id === item.stock_id);
+      return {
+        stock_id: item.stock_id,
+        stock_name: item.stock_name,
+        stock_code: item.stock_code,
+        support_price: supportLevel?.price || '-',
+        comment: stock?.operator_memo || supportLevel?.note || '',
+        is_active: item.is_active,
+      };
+    });
 }
 
 function renderAll() {
@@ -122,13 +140,18 @@ function renderAll() {
     renderStats(elements.dashboardStats, appState.data.session, appState.data.dashboard);
   }
 
-  const stockResults = byText(appState.data.stocks, elements.stockSearchInput.value || '', ['code', 'name']).slice(0, 12);
-  renderStockSearchResults(elements.stockSearchResults, stockResults, appState.ui.selectedStockId);
+  const homeSearchQuery = elements.homeStockSearchInput.value || '';
+  const homeResults = homeSearchQuery.trim()
+    ? byText(appState.data.stocks, homeSearchQuery, ['code', 'name']).slice(0, 12)
+    : [];
+  renderStockSearchResults(elements.homeStockSearchResults, homeResults, appState.ui.selectedHomeStockId);
   renderStockSummary(
-    elements.selectedStockSummary,
-    currentStock(),
-    appState.data.homeFeatured.map((item) => item.stock_id),
+    elements.selectedHomeStockSummary,
+    currentHomeStock(),
+    appState.data.homeFeatured.filter((item) => item.is_active).map((item) => item.stock_id),
   );
+  renderHomeWatchlistItems(elements.homeWatchlistList, buildHomeWatchlistItems());
+  elements.saveHomeWatchlistButton.disabled = !appState.ui.selectedHomeStockId;
 
   const levelResults = byText(appState.data.stocks, elements.levelStockSearchInput.value || '', ['code', 'name']).slice(0, 12);
   renderStockSearchResults(elements.levelStockSearchResults, levelResults, appState.ui.selectedLevelStockId);
@@ -137,18 +160,6 @@ function renderAll() {
   const levelItems = appState.data.priceLevels.filter((item) => item.stock_id === appState.ui.selectedLevelStockId);
   renderPriceLevels(elements.supportLevelsList, levelItems, 'SUPPORT');
   renderPriceLevels(elements.resistanceLevelsList, levelItems, 'RESISTANCE');
-
-  const stateFiltered = appState.data.supportStates.filter((item) => {
-    const statusOk = elements.stateStatusFilter.value === 'ALL' || item.status === elements.stateStatusFilter.value;
-    const q = (elements.stateSearchInput.value || '').trim().toLowerCase();
-    const searchOk = !q || `${item.stock_name} ${item.stock_code}`.toLowerCase().includes(q);
-    return statusOk && searchOk;
-  });
-  renderSupportStatesTable(elements.supportStatesTable, stateFiltered);
-
-  const featuredResults = byText(appState.data.stocks, elements.featuredSearchInput.value || '', ['code', 'name']).slice(0, 8);
-  renderStockSearchResults(elements.featuredSearchResults, featuredResults, null);
-  renderFeaturedItems(elements.featuredItemsList, appState.ui.featuredDraft);
 
   renderThemeOptions(elements.themeSelect, appState.data.themes, appState.ui.selectedThemeId);
   const themeSearchResults = byText(appState.data.stocks, elements.themeStockSearchInput.value || '', ['code', 'name']).slice(0, 8);
@@ -174,12 +185,11 @@ function renderAll() {
 }
 
 async function refreshAll() {
-  const [sessionRes, dashboardRes, stocksRes, levelsRes, statesRes, featuredRes, themesRes, contentsRes] = await Promise.all([
+  const [sessionRes, dashboardRes, stocksRes, levelsRes, featuredRes, themesRes, contentsRes] = await Promise.all([
     apiRequest(appState, '/admin/auth/me'),
     apiRequest(appState, '/admin/dashboard'),
     apiRequest(appState, '/admin/stocks'),
     apiRequest(appState, '/admin/price-levels'),
-    apiRequest(appState, '/admin/support-states'),
     apiRequest(appState, '/admin/home-featured'),
     apiRequest(appState, '/admin/themes'),
     apiRequest(appState, '/admin/contents'),
@@ -189,18 +199,9 @@ async function refreshAll() {
   appState.data.dashboard = dashboardRes.data;
   appState.data.stocks = stocksRes.data;
   appState.data.priceLevels = levelsRes.data;
-  appState.data.supportStates = statesRes.data;
   appState.data.homeFeatured = featuredRes.data;
   appState.data.themes = themesRes.data;
   appState.data.contents = contentsRes.data;
-
-  appState.ui.featuredDraft = featuredRes.data.map((item) => ({
-    stock_id: item.stock_id,
-    stock_name: item.stock_name,
-    stock_code: item.stock_code,
-    is_active: item.is_active,
-    display_order: item.display_order,
-  }));
 
   if (appState.ui.selectedThemeId) {
     hydrateThemeDraft(appState.ui.selectedThemeId);
@@ -208,18 +209,36 @@ async function refreshAll() {
   if (appState.ui.selectedContentId) {
     hydrateContentDraft(appState.ui.selectedContentId);
   }
+  if (appState.ui.selectedHomeStockId) {
+    const supportLevel = getAdminHomeSupportLevel(appState.ui.selectedHomeStockId);
+    const stock = currentHomeStock();
+    if (stock) {
+      elements.homeComment.value = stock.operator_memo || supportLevel?.note || '';
+      elements.homeSupportPrice.value = supportLevel?.price || '';
+    }
+  }
   renderAll();
 }
 
-function fillStockForm(stock = null) {
-  appState.ui.selectedStockId = stock?.id || null;
-  elements.stockCode.value = stock?.code || '';
-  elements.stockName.value = stock?.name || '';
-  elements.stockMarketType.value = stock?.market_type || 'KOSPI';
-  elements.stockSector.value = stock?.sector || '';
-  elements.stockThemeTags.value = stock?.theme_tags || '';
-  elements.stockMemo.value = stock?.operator_memo || '';
-  elements.stockActive.checked = stock?.is_active ?? true;
+function fillHomeWatchlistForm(stock = null, message = '') {
+  appState.ui.selectedHomeStockId = stock?.id || null;
+  appState.ui.editingFeaturedStockId = stock?.id || null;
+  const supportLevel = stock ? getAdminHomeSupportLevel(stock.id) : null;
+  elements.homeSupportPrice.value = supportLevel?.price || '';
+  elements.homeComment.value = stock?.operator_memo || supportLevel?.note || '';
+  renderAll();
+  if (message) {
+    setMessage(elements.homeWatchlistMessage, message, 'success');
+  }
+}
+
+function resetHomeWatchlistForm() {
+  appState.ui.selectedHomeStockId = null;
+  appState.ui.editingFeaturedStockId = null;
+  elements.homeStockSearchInput.value = '';
+  elements.homeSupportPrice.value = '';
+  elements.homeComment.value = '';
+  setMessage(elements.homeWatchlistMessage, '');
   renderAll();
 }
 
@@ -261,23 +280,159 @@ async function login() {
   await refreshAll();
 }
 
-async function saveStock() {
+async function upsertStockMemo(stock, comment) {
+  await apiRequest(appState, `/admin/stocks/${stock.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      code: stock.code,
+      name: stock.name,
+      market_type: stock.market_type,
+      sector: stock.sector || null,
+      theme_tags: stock.theme_tags || null,
+      operator_memo: comment,
+      is_active: stock.is_active,
+    }),
+  });
+}
+
+async function upsertAdminHomeSupportLevel(stockId, comment) {
+  const existingLevels = appState.data.priceLevels.filter(
+    (item) => item.stock_id === stockId && item.level_type === 'SUPPORT' && item.source_label === HOME_SOURCE_LABEL,
+  );
+  const targetLevel = existingLevels.find((item) => item.is_active) || existingLevels[0] || null;
   const payload = {
-    code: elements.stockCode.value.trim(),
-    name: elements.stockName.value.trim(),
-    market_type: elements.stockMarketType.value.trim() || 'OTHER',
-    sector: elements.stockSector.value.trim() || null,
-    theme_tags: elements.stockThemeTags.value.trim() || null,
-    operator_memo: elements.stockMemo.value.trim() || null,
-    is_active: elements.stockActive.checked,
+    stock_id: stockId,
+    level_type: 'SUPPORT',
+    price: elements.homeSupportPrice.value.trim(),
+    proximity_threshold_pct: '1.50',
+    rebound_threshold_pct: '5.00',
+    source_label: HOME_SOURCE_LABEL,
+    note: comment,
+    is_active: true,
   };
-  const path = appState.ui.selectedStockId ? `/admin/stocks/${appState.ui.selectedStockId}` : '/admin/stocks';
-  const method = appState.ui.selectedStockId ? 'PUT' : 'POST';
-  const response = await apiRequest(appState, path, { method, body: JSON.stringify(payload) });
-  setMessage(elements.stockFormMessage, response.message, 'success');
+  if (targetLevel) {
+    await apiRequest(appState, `/admin/price-levels/${targetLevel.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  } else {
+    await apiRequest(appState, '/admin/price-levels', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  await Promise.all(
+    existingLevels
+      .filter((item) => item.id !== targetLevel?.id && item.is_active)
+      .map((item) =>
+        apiRequest(appState, `/admin/price-levels/${item.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            stock_id: item.stock_id,
+            level_type: item.level_type,
+            price: item.price,
+            proximity_threshold_pct: item.proximity_threshold_pct,
+            rebound_threshold_pct: item.rebound_threshold_pct,
+            source_label: item.source_label,
+            note: item.note,
+            is_active: false,
+          }),
+        }),
+      ),
+  );
+}
+
+async function saveHomeWatchlist() {
+  const stock = currentHomeStock();
+  if (!stock) {
+    throw new Error('검색 결과에서 종목을 먼저 선택해주세요.');
+  }
+  const supportPrice = elements.homeSupportPrice.value.trim();
+  if (!supportPrice) {
+    throw new Error('지지선 가격을 입력해주세요.');
+  }
+  const comment = elements.homeComment.value.trim() || null;
+
+  await upsertStockMemo(stock, comment);
+  await upsertAdminHomeSupportLevel(stock.id, comment);
+
+  const existingItem = appState.data.homeFeatured.find((item) => item.stock_id === stock.id);
+  const activeItems = [...appState.data.homeFeatured]
+    .filter((item) => item.is_active && item.stock_id !== stock.id)
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((item, index) => ({
+      stock_id: item.stock_id,
+      display_order: index + 1,
+      is_active: true,
+    }));
+
+  if (existingItem) {
+    const insertIndex = Math.max(0, Math.min((existingItem.display_order || 1) - 1, activeItems.length));
+    activeItems.splice(insertIndex, 0, {
+      stock_id: stock.id,
+      display_order: existingItem.display_order || insertIndex + 1,
+      is_active: true,
+    });
+  } else {
+    activeItems.push({
+      stock_id: stock.id,
+      display_order: activeItems.length + 1,
+      is_active: true,
+    });
+  }
+
+  activeItems.forEach((item, index) => {
+    item.display_order = index + 1;
+  });
+
+  await apiRequest(appState, '/admin/home-featured', {
+    method: 'PUT',
+    body: JSON.stringify({ items: activeItems }),
+  });
+
   await refreshAll();
-  const savedStock = appState.data.stocks.find((item) => item.id === response.data.id) || null;
-  fillStockForm(savedStock);
+  fillHomeWatchlistForm(currentHomeStock());
+  setMessage(elements.homeWatchlistMessage, '관심종목을 저장했습니다.', 'success');
+}
+
+async function removeHomeWatchlist(stockId) {
+  const nextItems = appState.data.homeFeatured
+    .filter((item) => item.is_active && item.stock_id !== stockId)
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((item, index) => ({
+      stock_id: item.stock_id,
+      display_order: index + 1,
+      is_active: true,
+    }));
+
+  await apiRequest(appState, '/admin/home-featured', {
+    method: 'PUT',
+    body: JSON.stringify({ items: nextItems }),
+  });
+
+  const supportLevel = getAdminHomeSupportLevel(stockId);
+  if (supportLevel) {
+    await apiRequest(appState, `/admin/price-levels/${supportLevel.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        stock_id: supportLevel.stock_id,
+        level_type: supportLevel.level_type,
+        price: supportLevel.price,
+        proximity_threshold_pct: supportLevel.proximity_threshold_pct,
+        rebound_threshold_pct: supportLevel.rebound_threshold_pct,
+        source_label: supportLevel.source_label,
+        note: supportLevel.note,
+        is_active: false,
+      }),
+    });
+  }
+
+  if (appState.ui.selectedHomeStockId === stockId) {
+    resetHomeWatchlistForm();
+  }
+  await refreshAll();
+  setMessage(elements.homeWatchlistMessage, '관심종목에서 제외했습니다.', 'success');
 }
 
 async function savePriceLevel() {
@@ -320,20 +475,6 @@ async function togglePriceLevel(levelId, nextActive) {
   await refreshAll();
 }
 
-async function saveFeatured() {
-  const items = appState.ui.featuredDraft.map((item, index) => ({
-    stock_id: item.stock_id,
-    display_order: index + 1,
-    is_active: item.is_active,
-  }));
-  const response = await apiRequest(appState, '/admin/home-featured', {
-    method: 'PUT',
-    body: JSON.stringify({ items }),
-  });
-  setMessage(elements.featuredFormMessage, response.message, 'success');
-  await refreshAll();
-}
-
 async function saveTheme() {
   const payload = {
     name: elements.themeName.value.trim(),
@@ -363,8 +504,8 @@ async function saveContent() {
     thumbnail_url: elements.contentThumbnailUrl.value.trim() || null,
     stock_id: appState.ui.selectedContentStockId,
     theme_id: appState.ui.selectedContentThemeId,
-    sort_order: Number(elements.contentSortOrder.value.trim() || 0),
-    published_at: elements.contentPublishedAt.value.trim() || null,
+    published_at: elements.contentPublishedAt.value || null,
+    sort_order: Number(elements.contentSortOrder.value || 0),
     is_published: elements.contentPublished.checked,
   };
   const path = appState.ui.selectedContentId ? `/admin/contents/${appState.ui.selectedContentId}` : '/admin/contents';
@@ -390,48 +531,6 @@ async function sendManualPush() {
   setMessage(elements.pushMessageStatus, response.message, 'success');
 }
 
-async function submitStateForceUpdate() {
-  if (!appState.ui.stateForceTarget) {
-    throw new Error('수정할 상태를 먼저 선택해주세요.');
-  }
-  const response = await apiRequest(
-    appState,
-    `/admin/support-states/${appState.ui.stateForceTarget.id}/force`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status: elements.stateForceStatus.value,
-        memo: elements.stateForceMemo.value.trim(),
-        status_reason: elements.stateForceReason.value.trim() || null,
-        invalid_reason: elements.stateForceInvalidReason.value.trim() || null,
-      }),
-    },
-  );
-  setMessage(elements.stateForceMessage, response.message, 'success');
-  await refreshAll();
-  closeStateModal();
-}
-
-function closeStateModal() {
-  elements.stateForceModal.hidden = true;
-  appState.ui.stateForceTarget = null;
-  elements.stateForceMemo.value = '';
-  elements.stateForceReason.value = '';
-  elements.stateForceInvalidReason.value = '';
-  setMessage(elements.stateForceMessage, '');
-}
-
-function openStateModal(stateId) {
-  const target = appState.data.supportStates.find((item) => item.id === Number(stateId));
-  if (!target) {
-    return;
-  }
-  appState.ui.stateForceTarget = target;
-  elements.stateForceTarget.textContent = `${target.stock_name} (${target.stock_code}) · ${target.level_price} · 현재 ${target.status}`;
-  elements.stateForceStatus.value = target.status;
-  elements.stateForceModal.hidden = false;
-}
-
 function wireTabNavigation() {
   elements.tabNav.addEventListener('click', (event) => {
     const button = event.target.closest('.tab-button');
@@ -447,16 +546,12 @@ function wireTabNavigation() {
 
 function bindSearchReRendering() {
   [
-    elements.stockSearchInput,
+    elements.homeStockSearchInput,
     elements.levelStockSearchInput,
-    elements.stateSearchInput,
-    elements.featuredSearchInput,
     elements.themeStockSearchInput,
     elements.contentStockSearchInput,
     elements.contentThemeSearchInput,
-    elements.stateStatusFilter,
   ].forEach((input) => input.addEventListener('input', renderAll));
-  elements.stateStatusFilter.addEventListener('change', renderAll);
 }
 
 function bindDelegatedClicks() {
@@ -464,22 +559,23 @@ function bindDelegatedClicks() {
     const stockItem = event.target.closest('[data-stock-id]');
     if (stockItem && stockItem.classList.contains('selection-item')) {
       const stock = appState.data.stocks.find((item) => item.id === Number(stockItem.dataset.stockId));
-      if (stockItem.parentElement === elements.stockSearchResults) {
-        fillStockForm(stock);
-      } else if (stockItem.parentElement === elements.levelStockSearchResults) {
+      if (stockItem.parentElement === elements.homeStockSearchResults) {
+        fillHomeWatchlistForm(stock);
+        return;
+      }
+      if (stockItem.parentElement === elements.levelStockSearchResults) {
         appState.ui.selectedLevelStockId = stock?.id || null;
         renderAll();
-      } else if (stockItem.parentElement === elements.featuredSearchResults) {
-        if (stock && !appState.ui.featuredDraft.some((item) => item.stock_id === stock.id)) {
-          appState.ui.featuredDraft.push({ stock_id: stock.id, stock_name: stock.name, stock_code: stock.code, is_active: true });
-          renderAll();
-        }
-      } else if (stockItem.parentElement === elements.themeStockSearchResults) {
+        return;
+      }
+      if (stockItem.parentElement === elements.themeStockSearchResults) {
         if (stock && !appState.ui.themeStockDraft.some((item) => item.stock_id === stock.id)) {
           appState.ui.themeStockDraft.push({ stock_id: stock.id, stock_name: stock.name, role_type: 'FOLLOWER', score: '' });
           renderAll();
         }
-      } else if (stockItem.parentElement === elements.contentStockSearchResults) {
+        return;
+      }
+      if (stockItem.parentElement === elements.contentStockSearchResults) {
         appState.ui.selectedContentStockId = stock?.id || null;
         renderAll();
       }
@@ -497,32 +593,13 @@ function bindDelegatedClicks() {
       await togglePriceLevel(event.target.dataset.levelToggleId, event.target.dataset.nextActive);
       return;
     }
-    if (event.target.matches('[data-force-state-id]')) {
-      openStateModal(event.target.dataset.forceStateId);
+    if (event.target.matches('[data-featured-edit]')) {
+      const stock = appState.data.stocks.find((item) => item.id === Number(event.target.dataset.featuredEdit));
+      fillHomeWatchlistForm(stock, '수정할 관심종목 정보를 불러왔습니다.');
       return;
     }
     if (event.target.matches('[data-featured-remove]')) {
-      appState.ui.featuredDraft = appState.ui.featuredDraft.filter((item) => item.stock_id !== Number(event.target.dataset.featuredRemove));
-      renderAll();
-      return;
-    }
-    if (event.target.matches('[data-featured-toggle]')) {
-      const item = appState.ui.featuredDraft.find((entry) => entry.stock_id === Number(event.target.dataset.featuredToggle));
-      if (item) {
-        item.is_active = !item.is_active;
-      }
-      renderAll();
-      return;
-    }
-    if (event.target.matches('[data-featured-move]')) {
-      const stockId = Number(event.target.dataset.stockId);
-      const index = appState.ui.featuredDraft.findIndex((item) => item.stock_id === stockId);
-      const direction = event.target.dataset.featuredMove;
-      const swapIndex = direction === 'up' ? index - 1 : index + 1;
-      if (index >= 0 && appState.ui.featuredDraft[swapIndex]) {
-        [appState.ui.featuredDraft[index], appState.ui.featuredDraft[swapIndex]] = [appState.ui.featuredDraft[swapIndex], appState.ui.featuredDraft[index]];
-      }
-      renderAll();
+      await removeHomeWatchlist(Number(event.target.dataset.featuredRemove));
       return;
     }
     if (event.target.matches('[data-theme-stock-remove]')) {
@@ -568,27 +645,19 @@ function bindPrimaryActions() {
       setMessage(elements.loginMessage, error.message, 'error');
     }
   });
-  elements.saveStockButton.addEventListener('click', async () => {
+  elements.saveHomeWatchlistButton.addEventListener('click', async () => {
     try {
-      await saveStock();
+      await saveHomeWatchlist();
     } catch (error) {
-      setMessage(elements.stockFormMessage, error.message, 'error');
+      setMessage(elements.homeWatchlistMessage, error.message, 'error');
     }
   });
-  elements.resetStockButton.addEventListener('click', () => fillStockForm(null));
-  elements.stockCreateNewButton.addEventListener('click', () => fillStockForm(null));
+  elements.resetHomeWatchlistButton.addEventListener('click', resetHomeWatchlistForm);
   elements.savePriceLevelButton.addEventListener('click', async () => {
     try {
       await savePriceLevel();
     } catch (error) {
       setMessage(elements.priceLevelMessage, error.message, 'error');
-    }
-  });
-  elements.saveFeaturedButton.addEventListener('click', async () => {
-    try {
-      await saveFeatured();
-    } catch (error) {
-      setMessage(elements.featuredFormMessage, error.message, 'error');
     }
   });
   elements.themeSelect.addEventListener('change', () => hydrateThemeDraft(elements.themeSelect.value));
@@ -616,15 +685,6 @@ function bindPrimaryActions() {
       setMessage(elements.pushMessageStatus, error.message, 'error');
     }
   });
-  elements.submitStateForceButton.addEventListener('click', async () => {
-    try {
-      await submitStateForceUpdate();
-    } catch (error) {
-      setMessage(elements.stateForceMessage, error.message, 'error');
-    }
-  });
-  elements.cancelStateForceButton.addEventListener('click', closeStateModal);
-  elements.closeStateModalButton.addEventListener('click', closeStateModal);
 }
 
 async function bootstrap() {
@@ -633,6 +693,7 @@ async function bootstrap() {
   bindSearchReRendering();
   bindDelegatedClicks();
   bindPrimaryActions();
+  renderAll();
   if (appState.token) {
     setLoggedIn(true);
     try {
