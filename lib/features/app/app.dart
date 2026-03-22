@@ -4,6 +4,7 @@ import '../../core/config/app_config.dart';
 import '../../core/navigation/app_navigator.dart';
 import '../../core/push/push_notification_service.dart';
 import '../../core/theme/app_theme.dart';
+import '../auth/presentation/auth_gate.dart';
 import '../home/presentation/home_screen.dart';
 import '../my/presentation/my_screen.dart';
 import '../notifications/presentation/notifications_screen.dart';
@@ -36,8 +37,53 @@ class SrLabApp extends StatelessWidget {
         theme: AppTheme.light(),
         navigatorKey: _navigatorKey,
         scaffoldMessengerKey: _scaffoldMessengerKey,
-        home: const AppShell(),
+        home: _FirebaseBootstrapGate(
+          config: config,
+          child: AuthGate(child: const AppShell()),
+        ),
       ),
+    );
+  }
+}
+
+class _FirebaseBootstrapGate extends StatelessWidget {
+  const _FirebaseBootstrapGate({
+    required this.config,
+    required this.child,
+  });
+
+  final AppConfig config;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!config.isFirebaseConfigured) {
+      return child;
+    }
+
+    return FutureBuilder<void>(
+      future: ensureFirebaseInitialized(config),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Firebase 초기화에 실패했습니다.\n${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+        return child;
+      },
     );
   }
 }

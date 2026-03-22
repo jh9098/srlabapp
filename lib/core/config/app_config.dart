@@ -12,6 +12,8 @@ class AppConfig {
     required this.firebaseAndroidAppId,
     required this.firebaseWebAppId,
     required this.firebaseWebVapidKey,
+    required this.googleClientId,
+    required this.googleServerClientId,
   });
 
   final String apiBaseUrl;
@@ -26,6 +28,8 @@ class AppConfig {
   final String firebaseAndroidAppId;
   final String firebaseWebAppId;
   final String firebaseWebVapidKey;
+  final String googleClientId;
+  final String googleServerClientId;
 
   bool get isFirebaseConfigured {
     return firebaseProjectId.isNotEmpty &&
@@ -57,6 +61,8 @@ class AppConfig {
       firebaseAndroidAppId: String.fromEnvironment('FIREBASE_ANDROID_APP_ID', defaultValue: ''),
       firebaseWebAppId: String.fromEnvironment('FIREBASE_WEB_APP_ID', defaultValue: ''),
       firebaseWebVapidKey: String.fromEnvironment('FIREBASE_WEB_VAPID_KEY', defaultValue: ''),
+      googleClientId: String.fromEnvironment('GOOGLE_CLIENT_ID', defaultValue: ''),
+      googleServerClientId: String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID', defaultValue: ''),
     );
   }
 }

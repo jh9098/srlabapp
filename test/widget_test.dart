@@ -8,7 +8,7 @@ import 'package:srlabapp/features/stock/data/stock_models.dart';
 void main() {
   testWidgets('앱 하단 탭이 표시된다', (tester) async {
     await tester.pumpWidget(
-      const SrLabApp(
+      SrLabApp(
         config: AppConfig(
           apiBaseUrl: 'http://127.0.0.1:8000/api/v1',
           userIdentifier: 'demo-user',
@@ -22,6 +22,8 @@ void main() {
           firebaseAndroidAppId: '',
           firebaseWebAppId: '',
           firebaseWebVapidKey: '',
+          googleClientId: '',
+          googleServerClientId: '',
         ),
       ),
     );

@@ -82,6 +82,8 @@ python scripts/check_release_readiness.py
 - FCM 설정이 있으면 실제 HTTP 전송 시도
 - FCM 설정이 없으면 **DB 저장 + 로그 fallback**
 - Flutter 쪽 `firebase_messaging` 연동 코드 및 토큰 등록 흐름
+- Flutter 쪽 Firebase Auth + `users/{uid}` Firestore 프로필 유지 흐름
+- Flutter 홈/종목상세의 Firebase direct read( `adminWatchlist`, `stock_prices`, latest 문서 ) 기초 흐름
 
 즉, **코드는 연동 가능 상태**이고,
 실제 Firebase 콘솔/앱 등록/운영 키 입력만 외부 수동 단계로 남습니다.
@@ -475,10 +477,22 @@ flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1 --dart-defin
 
 ## 14. Cloud Firestore 읽기 비용 검토
 
-이번 저장소와 이번 변경은 **Cloud Firestore를 사용하지 않습니다.**
-따라서 이번 작업으로 인한 **Cloud Firestore document read 비용 증가는 0건**입니다.
+현재 앱은 **Firebase Auth + Firestore direct read**를 함께 사용합니다.
+따라서 Firebase 설정이 켜진 환경에서는 Firestore read 비용이 **0건이 아닙니다.**
 
-또한 이번 푸시/알림 구조는 Firestore 실시간 구독이 아니라,
-**백엔드 DB(PostgreSQL) + API 조회 방식**이라서 Firestore 읽기 소모를 유발하지 않습니다.
+현재 단계의 주요 읽기 흐름은 아래와 같습니다.
 
-즉, 현재 구조는 Firestore 비용 측면에서도 안전합니다.
+- 로그인 후 `users/{uid}` 문서 보장 조회 + 단일 문서 실시간 구독 1개
+- 홈 진입 시 `adminWatchlist` 공개 문서 목록 조회 1회
+- 홈에서 노출한 종목 수만큼 `stock_prices/{ticker}` 문서 개별 조회
+- 홈 시장 요약용 `popularStocks/latest`, `foreignNetBuy/latest`, `institutionNetBuy/latest`, `themeLeaders/latest` 문서 조회
+- 종목 상세 진입 시 `adminWatchlist` 1건 + `stock_prices/{ticker}` 1건 조회
+
+비용 관점에서 중요한 점은 다음과 같습니다.
+
+- 사용자 프로필은 여전히 **단일 문서 1개만 구독**합니다.
+- 홈의 공개 관심종목은 `limit(6)`으로 제한해 한 번에 읽는 문서 수를 억제했습니다.
+- 종목 상세는 선택한 종목에 대해서만 읽으므로, 사용자가 보지 않는 종목까지 미리 읽지 않습니다.
+- 다만 홈은 공개 종목 수만큼 `stock_prices` 문서를 추가로 읽으므로, featured limit를 크게 올리면 비용도 같이 증가합니다.
+
+즉, 이번 변경으로 Firestore 비용은 이전 단계보다 늘었지만, **홈 6종목 + latest 4문서 + 상세 1종목** 수준으로 상한을 둔 상태입니다.

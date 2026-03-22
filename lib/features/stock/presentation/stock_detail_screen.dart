@@ -11,9 +11,14 @@ import 'widgets/price_level_summary_card.dart';
 import 'widgets/stock_price_chart.dart';
 
 class StockDetailScreen extends StatefulWidget {
-  const StockDetailScreen({super.key, required this.stockCode});
+  const StockDetailScreen({
+    super.key,
+    required this.stockCode,
+    this.watchlistDocId,
+  });
 
   final String stockCode;
+  final String? watchlistDocId;
 
   @override
   State<StockDetailScreen> createState() => _StockDetailScreenState();
@@ -29,14 +34,21 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   }
 
   Future<_StockDetailViewData> _load() async {
-    final repository = AppScope.of(context).stockRepository;
-    final detail = await repository.fetchStockDetail(widget.stockCode);
+    final scope = AppScope.of(context);
+    final detail = scope.firebaseStockRepository != null
+        ? await scope.firebaseStockRepository!.fetchStockDetail(
+            widget.stockCode,
+            watchlistDocId: widget.watchlistDocId,
+          )
+        : await scope.stockRepository.fetchStockDetail(widget.stockCode);
     if (detail.recentSignalEvents.isNotEmpty) {
       return _StockDetailViewData(detail: detail, recentSignals: detail.recentSignalEvents);
     }
 
     try {
-      final recentSignals = await repository.fetchStockSignals(widget.stockCode);
+      final recentSignals = await scope.stockRepository.fetchStockSignals(
+        widget.stockCode,
+      );
       return _StockDetailViewData(detail: detail, recentSignals: recentSignals);
     } catch (_) {
       return _StockDetailViewData(detail: detail, recentSignals: const []);

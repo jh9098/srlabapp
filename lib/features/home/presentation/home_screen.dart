@@ -12,6 +12,7 @@ import '../../stock/presentation/stock_detail_screen.dart';
 import '../../theme/presentation/theme_detail_screen.dart';
 import '../../theme/presentation/theme_screen.dart';
 import '../data/home_models.dart';
+import 'widgets/market_snapshot_section.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -34,7 +35,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<_HomeScreenPayload> _load() async {
     try {
-      final data = await AppScope.of(context).homeRepository.fetchHome();
+      final scope = AppScope.of(context);
+      final data = scope.firebaseHomeRepository != null
+          ? await scope.firebaseHomeRepository!.fetchHome()
+          : await scope.homeRepository.fetchHome();
       return _HomeScreenPayload(
         data: data,
         isFallback: false,
@@ -60,6 +64,18 @@ class _HomeScreenState extends State<HomeScreen> {
             supportNearCount: 0,
             resistanceNearCount: 0,
             warningCount: 0,
+          ),
+          popularStocks: const HomeMarketSnapshotModel(
+            title: '인기 종목',
+            items: [],
+          ),
+          foreignNetBuy: const HomeMarketSnapshotModel(
+            title: '외국인 순매수',
+            items: [],
+          ),
+          institutionNetBuy: const HomeMarketSnapshotModel(
+            title: '기관 순매수',
+            items: [],
           ),
           themes: themes,
           recentContents: contents,
@@ -170,8 +186,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       summary: item.summary,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              StockDetailScreen(stockCode: item.stockCode),
+                          builder: (_) => StockDetailScreen(
+                            stockCode: item.stockCode,
+                            watchlistDocId: item.watchlistDocId.isEmpty
+                                ? null
+                                : item.watchlistDocId,
+                          ),
                         ),
                       ),
                     ),
@@ -205,6 +225,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       count: data.watchlistSignalSummary.warningCount,
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              MarketSnapshotSection(
+                snapshots: [
+                  data.popularStocks,
+                  data.foreignNetBuy,
+                  data.institutionNetBuy,
                 ],
               ),
               const SizedBox(height: 24),

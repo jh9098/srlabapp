@@ -39,7 +39,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   }
 
   Future<List<HomeFeaturedStockModel>> _loadOperatorFallback() async {
-    final home = await AppScope.of(context).homeRepository.fetchHome();
+    final scope = AppScope.of(context);
+    final home = scope.firebaseHomeRepository != null
+        ? await scope.firebaseHomeRepository!.fetchHome()
+        : await scope.homeRepository.fetchHome();
     return home.featuredStocks;
   }
 
@@ -92,13 +95,18 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
             onOpenSearch: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const StockSearchScreen()),
             ),
-            onOpenDetail: (stockCode) => Navigator.of(context).push(
+            onOpenDetail: (item) => Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => StockDetailScreen(stockCode: stockCode),
+                builder: (_) => StockDetailScreen(
+                  stockCode: item.stockCode,
+                  watchlistDocId: item.watchlistDocId.isEmpty
+                      ? null
+                      : item.watchlistDocId,
+                ),
               ),
             ),
-            onAddWatchlist: (stockCode) async {
-              await _controller.add(stockCode);
+            onAddWatchlist: (item) async {
+              await _controller.add(item.stockCode);
             },
             controller: _controller,
           );
@@ -211,8 +219,8 @@ class _OperatorWatchlistFallback extends StatelessWidget {
   final Future<List<HomeFeaturedStockModel>> future;
   final Future<void> Function() onReload;
   final VoidCallback onOpenSearch;
-  final void Function(String stockCode) onOpenDetail;
-  final Future<void> Function(String stockCode) onAddWatchlist;
+  final void Function(HomeFeaturedStockModel item) onOpenDetail;
+  final Future<void> Function(HomeFeaturedStockModel item) onAddWatchlist;
   final WatchlistController controller;
   final String? errorMessage;
 
@@ -290,11 +298,11 @@ class _OperatorWatchlistFallback extends StatelessWidget {
                           ? const Chip(label: Text('추가됨'))
                           : FilledButton(
                               onPressed: () async {
-                                await onAddWatchlist(item.stockCode);
+                                await onAddWatchlist(item);
                               },
                               child: const Text('추가'),
                             ),
-                      onTap: () => onOpenDetail(item.stockCode),
+                      onTap: () => onOpenDetail(item),
                     ),
                   );
                 },
