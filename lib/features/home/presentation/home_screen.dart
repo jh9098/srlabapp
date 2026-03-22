@@ -34,11 +34,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<_HomeScreenPayload> _load() async {
+    final scope = AppScope.of(context);
+    final firebaseHomeRepository = scope.firebaseHomeRepository;
+    final homeRepository = scope.homeRepository;
+    final themeRepository = scope.themeRepository;
+
     try {
-      final scope = AppScope.of(context);
-      final data = scope.firebaseHomeRepository != null
-          ? await scope.firebaseHomeRepository!.fetchHome()
-          : await scope.homeRepository.fetchHome();
+      final data = firebaseHomeRepository != null
+          ? await firebaseHomeRepository.fetchHome()
+          : await homeRepository.fetchHome();
       return _HomeScreenPayload(
         data: data,
         isFallback: false,
@@ -50,7 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!shouldFallback) rethrow;
 
-      final themeRepository = AppScope.of(context).themeRepository;
       final themes = await themeRepository.fetchThemes();
       final contents = await themeRepository.fetchContents(limit: 4);
 
