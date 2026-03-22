@@ -3,6 +3,7 @@ import '../../shared/models/common_models.dart';
 
 class HomeFeaturedStockModel {
   const HomeFeaturedStockModel({
+    required this.watchlistDocId,
     required this.stockCode,
     required this.stockName,
     required this.currentPrice,
@@ -11,6 +12,7 @@ class HomeFeaturedStockModel {
     required this.summary,
   });
 
+  final String watchlistDocId;
   final String stockCode;
   final String stockName;
   final double currentPrice;
@@ -20,6 +22,7 @@ class HomeFeaturedStockModel {
 
   factory HomeFeaturedStockModel.fromJson(Map<String, dynamic> json) {
     return HomeFeaturedStockModel(
+      watchlistDocId: json['watchlist_doc_id'] as String? ?? '',
       stockCode: json['stock_code'] as String? ?? '',
       stockName: json['stock_name'] as String? ?? '',
       currentPrice: parseJsonDouble(json['current_price']),
@@ -46,6 +49,31 @@ class HomeWatchlistSignalSummaryModel {
       supportNearCount: parseJsonInt(json['support_near_count']),
       resistanceNearCount: parseJsonInt(json['resistance_near_count']),
       warningCount: parseJsonInt(json['warning_count']),
+    );
+  }
+}
+
+class HomeMarketSnapshotModel {
+  const HomeMarketSnapshotModel({
+    required this.title,
+    required this.items,
+  });
+
+  final String title;
+  final List<String> items;
+
+  bool get isEmpty => items.isEmpty;
+
+  factory HomeMarketSnapshotModel.fromJson(
+    String title,
+    List<dynamic>? items,
+  ) {
+    return HomeMarketSnapshotModel(
+      title: title,
+      items: (items ?? const [])
+          .map((item) => parseJsonString(item))
+          .where((item) => item.isNotEmpty)
+          .toList(),
     );
   }
 }
@@ -163,6 +191,9 @@ class HomeResponseModel {
     required this.marketHeadline,
     required this.featuredStocks,
     required this.watchlistSignalSummary,
+    required this.popularStocks,
+    required this.foreignNetBuy,
+    required this.institutionNetBuy,
     required this.themes,
     required this.recentContents,
   });
@@ -170,6 +201,9 @@ class HomeResponseModel {
   final String marketHeadline;
   final List<HomeFeaturedStockModel> featuredStocks;
   final HomeWatchlistSignalSummaryModel watchlistSignalSummary;
+  final HomeMarketSnapshotModel popularStocks;
+  final HomeMarketSnapshotModel foreignNetBuy;
+  final HomeMarketSnapshotModel institutionNetBuy;
   final List<ThemeItemModel> themes;
   final List<RecentContentModel> recentContents;
 
@@ -181,6 +215,24 @@ class HomeResponseModel {
           .toList(),
       watchlistSignalSummary: HomeWatchlistSignalSummaryModel.fromJson(
         (json['watchlist_signal_summary'] as Map<String, dynamic>?) ?? const {},
+      ),
+      popularStocks: HomeMarketSnapshotModel.fromJson(
+        '인기 종목',
+        (json['popular_stocks'] as List<dynamic>?) ??
+            (json['market_snapshots'] as Map<String, dynamic>?)?['popular_stocks']
+                as List<dynamic>?,
+      ),
+      foreignNetBuy: HomeMarketSnapshotModel.fromJson(
+        '외국인 순매수',
+        (json['foreign_net_buy'] as List<dynamic>?) ??
+            (json['market_snapshots'] as Map<String, dynamic>?)?['foreign_net_buy']
+                as List<dynamic>?,
+      ),
+      institutionNetBuy: HomeMarketSnapshotModel.fromJson(
+        '기관 순매수',
+        (json['institution_net_buy'] as List<dynamic>?) ??
+            (json['market_snapshots'] as Map<String, dynamic>?)?['institution_net_buy']
+                as List<dynamic>?,
       ),
       themes: (json['themes'] as List<dynamic>? ?? const [])
           .map((item) => ThemeItemModel.fromJson((item as Map<String, dynamic>?) ?? const {}))
