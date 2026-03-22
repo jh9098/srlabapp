@@ -70,7 +70,7 @@ FirestorePriceSummary parseFirestorePriceSummary(Map<String, dynamic> data) {
   final currentClose = parseJsonDouble(latest['close']);
   final previousClose = parseJsonDouble(previous?['close']);
   final changeValue = currentClose - previousClose;
-  final changePct = previousClose == 0 ? 0 : (changeValue / previousClose) * 100;
+  final changePct = previousClose == 0 ? 0.0 : (changeValue / previousClose) * 100;
 
   return FirestorePriceSummary(
     currentPrice: currentClose,
