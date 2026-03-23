@@ -26,6 +26,9 @@ class UserProfileRepository {
     required User user,
     String nickname = '',
     String fullName = '',
+    String gender = '',
+    String birthDate = '',
+    String phoneNumber = '',
   }) async {
     final now = FieldValue.serverTimestamp();
     final doc = _userDoc(user.uid);
@@ -44,9 +47,9 @@ class UserProfileRepository {
         'createdAt': now,
         'nickname': _resolvedText(nickname),
         'fullName': _resolvedText(fullName),
-        'gender': '',
-        'birthDate': '',
-        'phoneNumber': _resolvedText(user.phoneNumber),
+        'gender': _resolvedText(gender),
+        'birthDate': _resolvedText(birthDate),
+        'phoneNumber': _resolvedText(phoneNumber.isNotEmpty ? phoneNumber : user.phoneNumber),
       }, SetOptions(merge: true));
     } else {
       final existing = snapshot.data() ?? const <String, dynamic>{};
@@ -89,8 +92,20 @@ class UserProfileRepository {
       _putIfMissingOrBlank(
         updateData,
         existing: existing,
+        key: 'gender',
+        value: gender,
+      );
+      _putIfMissingOrBlank(
+        updateData,
+        existing: existing,
+        key: 'birthDate',
+        value: birthDate,
+      );
+      _putIfMissingOrBlank(
+        updateData,
+        existing: existing,
         key: 'phoneNumber',
-        value: user.phoneNumber,
+        value: phoneNumber.isNotEmpty ? phoneNumber : user.phoneNumber,
       );
 
       await doc.set(updateData, SetOptions(merge: true));
