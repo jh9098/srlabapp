@@ -57,6 +57,10 @@ class _FirebaseBootstrapGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (config.useFirebaseOnly && !config.isFirebaseConfigured) {
+      return const _FirebaseSetupRequiredScreen();
+    }
+
     if (!config.isFirebaseConfigured) {
       return child;
     }
@@ -88,6 +92,38 @@ class _FirebaseBootstrapGate extends StatelessWidget {
   }
 }
 
+
+class _FirebaseSetupRequiredScreen extends StatelessWidget {
+  const _FirebaseSetupRequiredScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off_rounded, size: 56),
+              SizedBox(height: 16),
+              Text(
+                'Firebase 설정이 없어 앱을 시작할 수 없습니다.',
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 8),
+              Text(
+                '백엔드 없는 모드(USE_FIREBASE_ONLY=true)에서는\nFIREBASE_PROJECT_ID, FIREBASE_API_KEY, FIREBASE_WEB_APP_ID 같은 dart-define 값이 필요합니다.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
 
@@ -114,7 +150,9 @@ class _AppShellState extends State<AppShell> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final scope = AppScope.of(context);
-    scope.watchlistController.load();
+    if (scope.config.enableBackendFeatures) {
+      scope.watchlistController.load();
+    }
     if (_didBootstrap) {
       return;
     }

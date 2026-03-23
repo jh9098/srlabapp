@@ -11,6 +11,79 @@ class FirebaseStockRepository {
 
   final FirebaseFirestore _firestore;
 
+
+  Future<List<StockSearchItemModel>> searchStocks(String query, {int limit = 20}) async {
+    final raw = query.trim();
+    if (raw.isEmpty) {
+      return const [];
+    }
+
+    final normalized = normalizeTicker(raw);
+    final seen = <String>{};
+    final results = <StockSearchItemModel>[];
+
+    void addItem(String code, String name) {
+      final normalizedCode = normalizeTicker(code);
+      if (normalizedCode.isEmpty || seen.contains(normalizedCode)) {
+        return;
+      }
+      seen.add(normalizedCode);
+      results.add(
+        StockSearchItemModel(
+          stockCode: normalizedCode,
+          stockName: name.trim().isEmpty ? normalizedCode : name.trim(),
+          marketType: 'KOR',
+        ),
+      );
+    }
+
+    if (normalized.isNotEmpty) {
+      final byTicker = await _firestore
+          .collection('stock_prices')
+          .orderBy('ticker')
+          .startAt([normalized])
+          .endAt(['$normalized'])
+          .limit(limit)
+          .get();
+      for (final doc in byTicker.docs) {
+        final data = doc.data();
+        addItem(data['ticker']?.toString() ?? doc.id, data['name']?.toString() ?? '');
+      }
+    }
+
+    if (results.length < limit) {
+      final byName = await _firestore
+          .collection('stock_prices')
+          .orderBy('name')
+          .startAt([raw])
+          .endAt(['$raw'])
+          .limit(limit)
+          .get();
+      for (final doc in byName.docs) {
+        final data = doc.data();
+        addItem(data['ticker']?.toString() ?? doc.id, data['name']?.toString() ?? '');
+      }
+    }
+
+    if (results.length < limit) {
+      final watchlistDocs = await _firestore.collection('adminWatchlist').limit(limit * 2).get();
+      for (final doc in watchlistDocs.docs) {
+        final data = doc.data();
+        final name = data['name']?.toString() ?? '';
+        final ticker = data['ticker']?.toString() ?? '';
+        final matches = name.contains(raw) || normalizeTicker(ticker).contains(normalized);
+        if (matches) {
+          addItem(ticker, name);
+        }
+        if (results.length >= limit) {
+          break;
+        }
+      }
+    }
+
+    return results.take(limit).toList();
+  }
+
   Future<StockDetailModel> fetchStockDetail(
     String stockCode, {
     String? watchlistDocId,

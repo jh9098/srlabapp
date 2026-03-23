@@ -1,8 +1,26 @@
+백엔드
+(.venv) D:\srlabapp\backend_api>uvicorn app.main:app --reload
+
+admin
+D:\srlabapp\admin_web>python -m http.server 4173
+
+프론트
+D:\srlabapp>flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1
+
+
 flutter clean
 flutter pub get
+flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8000/api/v1
+
+
+uvicorn app.main:app --reload
+
+
+python -m http.server 4173
+
+
 flutter run
 2
-
 git add .
 git commit -m "수정"
 git push

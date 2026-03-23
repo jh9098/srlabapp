@@ -5,6 +5,7 @@ import '../../home/data/home_models.dart';
 import '../../notifications/data/notification_models.dart';
 import '../../user/domain/feature_access.dart';
 import '../../user/domain/user_profile.dart';
+import 'admin_watchlist_editor_screen.dart';
 import 'admin_watchlist_preview_screen.dart';
 import 'widgets/admin_action_placeholders.dart';
 
@@ -68,6 +69,7 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
   @override
   Widget build(BuildContext context) {
     final hasFirebase = AppScope.of(context).config.isFirebaseConfigured;
+
     return Scaffold(
       appBar: AppBar(title: const Text('관리자 메뉴')),
       body: RefreshIndicator(
@@ -82,14 +84,14 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '읽기 중심 관리자 모드',
+                      '관리자 운영 모드',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      '이번 단계에서는 관리자 화면 진입, 운영 관심종목 확인, 신호/알림 미리보기까지만 먼저 엽니다.',
+                      '이번 단계에서는 운영 관심종목 조회와 편집을 우선 열고, 신호/알림 운영 도구는 미리보기 중심으로 유지합니다.',
                     ),
                     const SizedBox(height: 12),
                     Wrap(
@@ -97,12 +99,21 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
                       runSpacing: 8,
                       children: [
                         Chip(label: Text('role: ${widget.profile.role}')),
-                        Chip(label: Text('allowedPaths ${widget.profile.allowedPaths.length}개')),
+                        Chip(
+                          label: Text(
+                            'allowedPaths ${widget.profile.allowedPaths.length}개',
+                          ),
+                        ),
                         Chip(
                           label: Text(
                             FeatureAccess.canOpenAdmin(widget.profile)
                                 ? '관리자 접근 허용'
                                 : '관리자 접근 불가',
+                          ),
+                        ),
+                        Chip(
+                          label: Text(
+                            hasFirebase ? 'Firestore 연결됨' : 'Firebase 미설정',
                           ),
                         ),
                       ],
@@ -116,16 +127,34 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.visibility_outlined),
-                    title: const Text('운영 관심종목 보기'),
+                    leading: const Icon(Icons.edit_note_rounded),
+                    title: const Text('운영 관심종목 편집'),
                     subtitle: const Text(
-                      'adminWatchlist 문서를 읽기 전용으로 확인합니다.',
+                      'adminWatchlist 문서를 추가, 수정, 삭제합니다.',
                     ),
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: hasFirebase
                         ? () => Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const AdminWatchlistPreviewScreen(),
+                                builder: (_) =>
+                                    const AdminWatchlistEditorScreen(),
+                              ),
+                            )
+                        : null,
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(Icons.visibility_outlined),
+                    title: const Text('운영 관심종목 보기'),
+                    subtitle: const Text(
+                      'adminWatchlist 문서를 읽기 전용으로 빠르게 확인합니다.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: hasFirebase
+                        ? () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const AdminWatchlistPreviewScreen(),
                               ),
                             )
                         : null,
@@ -134,14 +163,18 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
                   const ListTile(
                     leading: Icon(Icons.linear_scale_rounded),
                     title: Text('지지/저항 레벨 보기'),
-                    subtitle: Text('운영 관심종목 상세 카드 안에서 개수와 메모를 먼저 확인합니다.'),
-                    trailing: Chip(label: Text('읽기전용')),
+                    subtitle: Text(
+                      '운영 관심종목 상세 카드 안에서 지지선/저항선 개수와 메모를 먼저 확인합니다.',
+                    ),
+                    trailing: Chip(label: Text('연결됨')),
                   ),
                   const Divider(height: 1),
                   const ListTile(
                     leading: Icon(Icons.notifications_active_outlined),
                     title: Text('신호/푸시 운영 보기'),
-                    subtitle: Text('아래 미리보기 카드에서 최근 후보와 현재 계정 알림 이력을 확인합니다.'),
+                    subtitle: Text(
+                      '아래 미리보기 카드에서 최근 후보와 현재 계정 알림 이력을 확인합니다.',
+                    ),
                     trailing: Chip(label: Text('미리보기')),
                   ),
                 ],
@@ -160,7 +193,7 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   widget.profile.allowedPaths.isEmpty
-                      ? 'allowedPaths가 비어 있어도 role=admin 이면 관리자 진입을 허용합니다.'
+                      ? 'allowedPaths가 비어 있어도 role=admin이면 관리자 진입을 허용합니다. 이제 adminWatchlist는 관리자 계정에서 직접 수정할 수 있습니다.'
                       : '현재 계정 allowedPaths: ${widget.profile.allowedPaths.join(', ')}',
                 ),
               ),
@@ -187,6 +220,7 @@ class _SignalPreviewCard extends StatelessWidget {
           builder: (context, snapshot) {
             final data = snapshot.data;
             final featured = data?.featuredStocks ?? const <HomeFeaturedStockModel>[];
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -237,6 +271,7 @@ class _NotificationPreviewCard extends StatelessWidget {
           future: future,
           builder: (context, snapshot) {
             final items = snapshot.data ?? const <NotificationItemModel>[];
+
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

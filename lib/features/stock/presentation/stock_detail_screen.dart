@@ -41,7 +41,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
             watchlistDocId: widget.watchlistDocId,
           )
         : await scope.stockRepository.fetchStockDetail(widget.stockCode);
-    if (detail.recentSignalEvents.isNotEmpty) {
+    if (detail.recentSignalEvents.isNotEmpty || scope.config.useFirebaseOnly) {
       return _StockDetailViewData(detail: detail, recentSignals: detail.recentSignalEvents);
     }
 
@@ -64,7 +64,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final watchlistController = AppScope.of(context).watchlistController;
+    final scope = AppScope.of(context);
+    final watchlistController = scope.watchlistController;
+    final enablePersonalWatchlist = scope.config.enableBackendFeatures;
     return Scaffold(
       appBar: AppBar(title: const Text('종목 상세')),
       body: AnimatedBuilder(
@@ -136,7 +138,9 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                                   style: Theme.of(context).textTheme.bodyMedium,
                                 ),
                                 const Spacer(),
-                                if (!isInWatchlist || watchlistId == null)
+                                if (!enablePersonalWatchlist)
+                                  const Chip(label: Text('Firebase 직독'))
+                                else if (!isInWatchlist || watchlistId == null)
                                   FilledButton.icon(
                                     onPressed: () async => watchlistController.add(widget.stockCode),
                                     icon: const Icon(Icons.add_rounded),

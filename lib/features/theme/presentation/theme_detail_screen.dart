@@ -13,10 +13,12 @@ class ThemeDetailScreen extends StatefulWidget {
     super.key,
     required this.themeId,
     required this.title,
+    this.fallbackTheme,
   });
 
   final int themeId;
   final String title;
+  final ThemeItemModel? fallbackTheme;
 
   @override
   State<ThemeDetailScreen> createState() => _ThemeDetailScreenState();
@@ -34,10 +36,28 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
     _future = _load();
   }
 
-  Future<ThemeDetailModel> _load() {
-    return AppScope.of(context)
-        .themeRepository
-        .fetchThemeDetail(widget.themeId);
+  Future<ThemeDetailModel> _load() async {
+    final scope = AppScope.of(context);
+    if (scope.config.useFirebaseOnly) {
+      final theme = widget.fallbackTheme ?? ThemeItemModel(
+        themeId: widget.themeId,
+        name: widget.title,
+        score: null,
+        summary: 'Firebase 직독 모드에서는 홈에서 제공한 테마 요약만 표시합니다.',
+        leaderStock: null,
+        followerStocks: const [],
+        stockCount: 0,
+      );
+      return ThemeDetailModel(
+        theme: theme,
+        stocks: [
+          if (theme.leaderStock != null) theme.leaderStock!,
+          ...theme.followerStocks,
+        ],
+        recentContents: const [],
+      );
+    }
+    return scope.themeRepository.fetchThemeDetail(widget.themeId);
   }
 
   Future<void> _reload() async {

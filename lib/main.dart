@@ -14,8 +14,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await ensureFirebaseInitialized(config);
 }
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final config = AppConfig.fromEnvironment();
+  if (config.isFirebaseConfigured) {
+    await ensureFirebaseInitialized(config);
+  }
   FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  runApp(SrLabApp(config: AppConfig.fromEnvironment()));
+  runApp(SrLabApp(config: config));
 }

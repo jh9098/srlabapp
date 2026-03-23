@@ -22,7 +22,9 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_initialized) return;
-    _future = _load();
+    if (!AppScope.of(context).config.useFirebaseOnly) {
+      _future = _load();
+    }
     _initialized = true;
   }
 
@@ -48,6 +50,20 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (AppScope.of(context).config.useFirebaseOnly) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('알림 설정')),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Firebase 직독 1차 단계에서는 서버 기반 알림 설정을 사용하지 않습니다.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('알림 설정')),
       body: FutureBuilder<AlertSettingsModel>(

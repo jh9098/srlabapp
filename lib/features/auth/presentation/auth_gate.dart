@@ -24,6 +24,20 @@ class _AuthGateState extends State<AuthGate> {
     final authRepository = scope.authRepository;
     final profileRepository = scope.userProfileRepository;
 
+    if (scope.config.useFirebaseOnly && (!scope.config.isFirebaseConfigured || authRepository == null || profileRepository == null)) {
+      return const Scaffold(
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Firebase 인증 설정이 없어 로그인 화면을 열 수 없습니다.\nFirebase dart-define 값을 먼저 확인하세요.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+
     if (!scope.config.isFirebaseConfigured || authRepository == null || profileRepository == null) {
       return widget.child;
     }

@@ -8,6 +8,9 @@ import '../../../core/widgets/loading_state.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/widgets/stock_card.dart';
 import '../../app/app_scope.dart';
+import '../data/firebase_home_repository.dart';
+import '../data/home_repository.dart';
+import '../../theme/data/theme_repository.dart';
 import '../../stock/presentation/stock_detail_screen.dart';
 import '../../theme/presentation/theme_detail_screen.dart';
 import '../../theme/presentation/theme_screen.dart';
@@ -23,11 +26,18 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<_HomeScreenPayload> _future;
+  late HomeRepository _homeRepository;
+  FirebaseHomeRepository? _firebaseHomeRepository;
+  late ThemeRepository _themeRepository;
   bool _initialized = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final scope = AppScope.of(context);
+    _homeRepository = scope.homeRepository;
+    _firebaseHomeRepository = scope.firebaseHomeRepository;
+    _themeRepository = scope.themeRepository;
     if (_initialized) return;
     _initialized = true;
     _future = _load();
@@ -35,14 +45,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<_HomeScreenPayload> _load() async {
     final scope = AppScope.of(context);
-    final firebaseHomeRepository = scope.firebaseHomeRepository;
-    final homeRepository = scope.homeRepository;
-    final themeRepository = scope.themeRepository;
-
     try {
-      final data = firebaseHomeRepository != null
-          ? await firebaseHomeRepository.fetchHome()
-          : await homeRepository.fetchHome();
+      if (scope.config.useFirebaseOnly) {
+        if (_firebaseHomeRepository == null) {
+          throw StateError('Firebase 홈 저장소를 사용할 수 없습니다. Firebase 설정(dart-define)을 먼저 확인하세요.');
+        }
+        final data = await _firebaseHomeRepository!.fetchHome();
+        return _HomeScreenPayload(
+          data: data,
+          isFallback: false,
+          fallbackReason: null,
+        );
+      }
+
+      final data = _firebaseHomeRepository != null
+          ? await _firebaseHomeRepository!.fetchHome()
+          : await _homeRepository.fetchHome();
       return _HomeScreenPayload(
         data: data,
         isFallback: false,
@@ -54,8 +72,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!shouldFallback) rethrow;
 
-      final themes = await themeRepository.fetchThemes();
-      final contents = await themeRepository.fetchContents(limit: 4);
+      final themes = scope.config.useFirebaseOnly || _firebaseHomeRepository != null
+          ? (await (_firebaseHomeRepository?.fetchHome() ?? Future.error(StateError('Firebase 홈 저장소를 사용할 수 없습니다.')))).themes
+          : await _themeRepository.fetchThemes();
+      final contents = scope.config.useFirebaseOnly ? const <RecentContentModel>[] : await _themeRepository.fetchContents(limit: 4);
 
       return _HomeScreenPayload(
         isFallback: true,

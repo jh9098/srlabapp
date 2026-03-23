@@ -43,7 +43,10 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
       _error = null;
     });
     try {
-      final items = await AppScope.of(context).stockRepository.searchStocks(query.trim());
+      final scope = AppScope.of(context);
+      final items = scope.config.useFirebaseOnly && scope.firebaseStockRepository != null
+          ? await scope.firebaseStockRepository!.searchStocks(query.trim())
+          : await scope.stockRepository.searchStocks(query.trim());
       setState(() {
         _items = items;
       });
@@ -116,20 +119,24 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final item = _items[index];
+        final scope = AppScope.of(context);
+        final enablePersonalWatchlist = scope.config.enableBackendFeatures;
         final existing = watchlistController.findByStockCode(item.stockCode);
         return Card(
           child: ListTile(
             title: Text(item.stockName),
             subtitle: Text('${item.stockCode} · ${item.marketType}'),
-            trailing: existing != null
-                ? FilledButton.tonal(
-                    onPressed: () async => watchlistController.remove(existing.watchlistId),
-                    child: const Text('삭제'),
-                  )
-                : FilledButton(
-                    onPressed: () async => watchlistController.add(item.stockCode),
-                    child: const Text('추가'),
-                  ),
+            trailing: !enablePersonalWatchlist
+                ? const Chip(label: Text('Firebase 직독'))
+                : existing != null
+                    ? FilledButton.tonal(
+                        onPressed: () async => watchlistController.remove(existing.watchlistId),
+                        child: const Text('삭제'),
+                      )
+                    : FilledButton(
+                        onPressed: () async => watchlistController.add(item.stockCode),
+                        child: const Text('추가'),
+                      ),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: item.stockCode)),
             ),

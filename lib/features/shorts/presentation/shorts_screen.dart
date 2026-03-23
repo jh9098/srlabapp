@@ -26,10 +26,16 @@ class _ShortsScreenState extends State<ShortsScreen> {
     _future = _load();
   }
 
-  Future<List<RecentContentModel>> _load() {
-    return AppScope.of(context)
-        .themeRepository
-        .fetchContents(category: 'SHORTS', limit: 20);
+  Future<List<RecentContentModel>> _load() async {
+    final scope = AppScope.of(context);
+    if (scope.config.useFirebaseOnly) {
+      if (scope.firebaseHomeRepository == null) {
+        throw StateError('Firebase 콘텐츠 데이터를 불러오려면 Firebase 설정이 필요합니다.');
+      }
+      final home = await scope.firebaseHomeRepository!.fetchHome();
+      return home.recentContents;
+    }
+    return scope.themeRepository.fetchContents(category: 'SHORTS', limit: 20);
   }
 
   Future<void> _reload() async {

@@ -26,8 +26,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _controller = AppScope.of(context).watchlistController;
-    if (!_controller.isLoading &&
+    final scope = AppScope.of(context);
+    _controller = scope.watchlistController;
+    if (!scope.config.useFirebaseOnly &&
+        !_controller.isLoading &&
         _controller.items.isEmpty &&
         _controller.errorMessage == null) {
       _controller.load();
@@ -40,6 +42,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
   Future<List<HomeFeaturedStockModel>> _loadOperatorFallback() async {
     final scope = AppScope.of(context);
+    if (scope.config.useFirebaseOnly) {
+      if (scope.firebaseHomeRepository == null) {
+        throw StateError('Firebase 운영 관심종목을 불러오려면 Firebase 설정이 필요합니다.');
+      }
+      final home = await scope.firebaseHomeRepository!.fetchHome();
+      return home.featuredStocks;
+    }
     final home = scope.firebaseHomeRepository != null
         ? await scope.firebaseHomeRepository!.fetchHome()
         : await scope.homeRepository.fetchHome();
@@ -54,6 +63,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   }
 
   bool _shouldShowOperatorFallback() {
+    if (AppScope.of(context).config.useFirebaseOnly) {
+      return true;
+    }
     if (_controller.items.isNotEmpty) {
       return false;
     }
@@ -88,8 +100,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           return _OperatorWatchlistFallback(
             errorMessage: _controller.errorMessage,
             future: _operatorFallbackFuture ?? _loadOperatorFallback(),
+            allowPersonalActions: !AppScope.of(context).config.useFirebaseOnly,
             onReload: () async {
-              await _controller.load();
+              if (!AppScope.of(context).config.useFirebaseOnly) {
+                await _controller.load();
+              }
               await _reloadFallback();
             },
             onOpenSearch: () => Navigator.of(context).push(
@@ -213,6 +228,7 @@ class _OperatorWatchlistFallback extends StatelessWidget {
     required this.onOpenDetail,
     required this.onAddWatchlist,
     required this.controller,
+    required this.allowPersonalActions,
     this.errorMessage,
   });
 
@@ -222,6 +238,7 @@ class _OperatorWatchlistFallback extends StatelessWidget {
   final void Function(HomeFeaturedStockModel item) onOpenDetail;
   final Future<void> Function(HomeFeaturedStockModel item) onAddWatchlist;
   final WatchlistController controller;
+  final bool allowPersonalActions;
   final String? errorMessage;
 
   @override
@@ -294,14 +311,16 @@ class _OperatorWatchlistFallback extends StatelessWidget {
                       subtitle: const Text(
                         '운영 관심종목 미리보기 · 상세 화면에서 지지선/저항선/상태 확인',
                       ),
-                      trailing: alreadyAdded
-                          ? const Chip(label: Text('추가됨'))
-                          : FilledButton(
-                              onPressed: () async {
-                                await onAddWatchlist(item);
-                              },
-                              child: const Text('추가'),
-                            ),
+                      trailing: !allowPersonalActions
+                          ? const Chip(label: Text('운영 종목'))
+                          : alreadyAdded
+                              ? const Chip(label: Text('추가됨'))
+                              : FilledButton(
+                                  onPressed: () async {
+                                    await onAddWatchlist(item);
+                                  },
+                                  child: const Text('추가'),
+                                ),
                       onTap: () => onOpenDetail(item),
                     ),
                   );
@@ -311,7 +330,7 @@ class _OperatorWatchlistFallback extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onOpenSearch,
                 icon: const Icon(Icons.search_rounded),
-                label: const Text('직접 종목 검색해서 추가하기'),
+                label: Text(allowPersonalActions ? '직접 종목 검색해서 추가하기' : '직접 종목 검색하기'),
               ),
             ],
           ),

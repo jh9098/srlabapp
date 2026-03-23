@@ -163,6 +163,9 @@ FirebaseOptions _buildFirebaseOptions(AppConfig config) {
     appId: appId,
     messagingSenderId: config.firebaseMessagingSenderId,
     projectId: config.firebaseProjectId,
+    authDomain: config.firebaseAuthDomain.isEmpty ? null : config.firebaseAuthDomain,
+    storageBucket: config.firebaseStorageBucket.isEmpty ? null : config.firebaseStorageBucket,
+    measurementId: config.firebaseMeasurementId.isEmpty ? null : config.firebaseMeasurementId,
     iosBundleId: config.firebaseIosBundleId.isEmpty ? null : config.firebaseIosBundleId,
   );
 }

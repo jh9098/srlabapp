@@ -27,8 +27,20 @@ class _ThemeScreenState extends State<ThemeScreen> {
     _future = _load();
   }
 
-  Future<List<ThemeItemModel>> _load() {
-    return AppScope.of(context).themeRepository.fetchThemes();
+  Future<List<ThemeItemModel>> _load() async {
+    final scope = AppScope.of(context);
+    if (scope.config.useFirebaseOnly) {
+      if (scope.firebaseHomeRepository == null) {
+        throw StateError('Firebase 테마 데이터를 불러오려면 Firebase 설정이 필요합니다.');
+      }
+      final home = await scope.firebaseHomeRepository!.fetchHome();
+      return home.themes;
+    }
+    if (scope.firebaseHomeRepository != null) {
+      final home = await scope.firebaseHomeRepository!.fetchHome();
+      return home.themes;
+    }
+    return scope.themeRepository.fetchThemes();
   }
 
   Future<void> _reload() async {
@@ -77,6 +89,7 @@ class _ThemeScreenState extends State<ThemeScreen> {
                       builder: (_) => ThemeDetailScreen(
                         themeId: theme.themeId,
                         title: theme.name,
+                        fallbackTheme: theme,
                       ),
                     ),
                   ),

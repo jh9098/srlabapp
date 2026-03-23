@@ -21,7 +21,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_initialized) return;
-    _future = _load();
+    if (!AppScope.of(context).config.useFirebaseOnly) {
+      _future = _load();
+    }
     _initialized = true;
   }
 
@@ -44,6 +46,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scope = AppScope.of(context);
+    if (scope.config.useFirebaseOnly) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('알림함')),
+        body: const EmptyState(
+          title: '알림 기능 준비 중',
+          description: 'Firebase 직독 1차 단계에서는 알림함/읽음 처리 기능을 잠시 숨깁니다.',
+          icon: Icons.notifications_paused_outlined,
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('알림함')),
       body: FutureBuilder<List<NotificationItemModel>>(
