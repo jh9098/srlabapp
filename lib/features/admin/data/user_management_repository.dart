@@ -10,12 +10,12 @@ class UserManagementRepository {
       _firestore.collection('users');
 
   Future<List<ManagedUserAccount>> fetchUsers({int limit = 100}) async {
-    final snapshot = await _users
-        .orderBy('updatedAt', descending: true)
-        .limit(limit)
-        .get();
+    final snapshot = await _users.limit(limit).get();
+    final users = snapshot.docs.map(_fromSnapshot).toList()
+      ..sort(_compareUsersForList);
 
-    return snapshot.docs.map(_fromSnapshot).toList();
+    await _repairMissingUserMetadata(snapshot.docs);
+    return users;
   }
 
   Future<ManagedUserAccount?> fetchUser(String uid) async {
@@ -38,6 +38,43 @@ class UserManagementRepository {
     }, SetOptions(merge: true));
   }
 
+  Future<int> countAdminUsers({int limit = 2}) async {
+    final snapshot = await _users
+        .where('role', isEqualTo: 'admin')
+        .limit(limit)
+        .get();
+    return snapshot.size;
+  }
+
+  Future<PermissionUpdateGuardResult> validatePermissionUpdate({
+    required ManagedUserAccount user,
+    required String nextRole,
+    required String? actingUserUid,
+  }) async {
+    final normalizedNextRole = _normalizeRole(nextRole);
+    final isRoleChanged = user.role != normalizedNextRole;
+    final isSelfAdminDemotion =
+        actingUserUid == user.uid && user.role == 'admin' && normalizedNextRole != 'admin';
+
+    if (isSelfAdminDemotion) {
+      return const PermissionUpdateGuardResult.blocked(
+        '현재 로그인한 admin 계정은 자기 자신을 member/guest로 내릴 수 없어요.',
+      );
+    }
+
+    final isAdminDemotion = user.role == 'admin' && normalizedNextRole != 'admin';
+    if (isRoleChanged && isAdminDemotion) {
+      final adminCount = await countAdminUsers();
+      if (adminCount <= 1) {
+        return const PermissionUpdateGuardResult.blocked(
+          '현재 시스템에 admin 계정이 1명뿐이라 마지막 admin을 강등할 수 없어요.',
+        );
+      }
+    }
+
+    return const PermissionUpdateGuardResult.allowed();
+  }
+
   ManagedUserAccount _fromSnapshot(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
   ) {
@@ -58,6 +95,48 @@ class UserManagementRepository {
       updatedAt: _toDateTime(data['updatedAt']),
       lastLoginAt: _toDateTime(data['lastLoginAt']),
     );
+  }
+
+  Future<void> _repairMissingUserMetadata(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) async {
+    final batch = _firestore.batch();
+    var hasPendingWrite = false;
+
+    for (final doc in docs) {
+      final data = doc.data();
+      final hasUpdatedAt = data['updatedAt'] != null;
+      final hasCreatedAt = data['createdAt'] != null;
+      if (hasUpdatedAt && hasCreatedAt) {
+        continue;
+      }
+
+      final createdAt = data['createdAt'];
+      batch.set(doc.reference, {
+        if (!hasCreatedAt) 'createdAt': FieldValue.serverTimestamp(),
+        if (!hasUpdatedAt) 'updatedAt': createdAt ?? FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      hasPendingWrite = true;
+    }
+
+    if (hasPendingWrite) {
+      await batch.commit();
+    }
+  }
+
+  int _compareUsersForList(ManagedUserAccount a, ManagedUserAccount b) {
+    final aSortKey = a.updatedAt ?? a.createdAt;
+    final bSortKey = b.updatedAt ?? b.createdAt;
+    if (aSortKey != null && bSortKey != null) {
+      final compareDate = bSortKey.compareTo(aSortKey);
+      if (compareDate != 0) {
+        return compareDate;
+      }
+    } else if (aSortKey != null || bSortKey != null) {
+      return aSortKey == null ? 1 : -1;
+    }
+
+    return a.uid.compareTo(b.uid);
   }
 
   List<String> _normalizeAllowedPaths(List<String> allowedPaths) {
@@ -131,4 +210,19 @@ class ManagedUserAccount {
     }
     return uid;
   }
+}
+
+class PermissionUpdateGuardResult {
+  const PermissionUpdateGuardResult._({
+    required this.allowed,
+    this.message,
+  });
+
+  const PermissionUpdateGuardResult.allowed() : this._(allowed: true);
+
+  const PermissionUpdateGuardResult.blocked(String message)
+      : this._(allowed: false, message: message);
+
+  final bool allowed;
+  final String? message;
 }

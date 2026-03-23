@@ -30,19 +30,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   void initState() {
     super.initState();
     _future = _load();
-    _searchController.addListener(() {
-      if (mounted) {
-        setState(() {});
-      }
-    });
+    _searchController.addListener(_triggerRebuild);
+    _allowedPathsController.addListener(_triggerRebuild);
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_triggerRebuild);
+    _allowedPathsController.removeListener(_triggerRebuild);
     _searchController.dispose();
     _allowedPathsController.dispose();
     super.dispose();
   }
+
+  void _triggerRebuild() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  String? get _currentUserUid => AppScope.of(context).authRepository?.currentUser?.uid;
 
   Future<List<ManagedUserAccount>> _load() {
     return _repository.fetchUsers(limit: 200);
@@ -103,6 +110,44 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       ..sort();
   }
 
+  bool get _hasChanges {
+    final user = _selectedUser;
+    if (user == null) {
+      return false;
+    }
+
+    final nextAllowedPaths = _parseAllowedPaths(_allowedPathsController.text);
+    if (_selectedRole != user.role) {
+      return true;
+    }
+    if (nextAllowedPaths.length != user.allowedPaths.length) {
+      return true;
+    }
+
+    for (var index = 0; index < nextAllowedPaths.length; index += 1) {
+      if (nextAllowedPaths[index] != user.allowedPaths[index]) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool get _isSelfAdmin {
+    final user = _selectedUser;
+    return user != null && user.uid == _currentUserUid && user.role == 'admin';
+  }
+
+  bool get _isSelfAdminDemotionBlocked {
+    return _isSelfAdmin && _selectedRole != 'admin';
+  }
+
+  String? get _roleProtectionMessage {
+    if (_isSelfAdmin) {
+      return '현재 로그인한 admin 계정은 자기 자신을 guest/member로 내릴 수 없어요.';
+    }
+    return null;
+  }
+
   List<ManagedUserAccount> _filterUsers(List<ManagedUserAccount> users) {
     final query = _searchController.text.trim().toLowerCase();
 
@@ -133,6 +178,38 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       return;
     }
 
+    if (!_hasChanges) {
+      _showMessage('변경된 내용이 없어서 저장하지 않았어요.');
+      return;
+    }
+
+    if (_isSelfAdminDemotionBlocked) {
+      _showMessage(_roleProtectionMessage!);
+      setState(() {
+        _selectedRole = 'admin';
+      });
+      return;
+    }
+
+    final guardResult = await _repository.validatePermissionUpdate(
+      user: user,
+      nextRole: _selectedRole,
+      actingUserUid: _currentUserUid,
+    );
+    if (!guardResult.allowed) {
+      if (!mounted) {
+        return;
+      }
+      _showMessage(guardResult.message ?? '권한 변경이 차단되었어요.');
+      await _reload(selectUid: user.uid);
+      return;
+    }
+
+    final shouldProceed = await _confirmSave(user);
+    if (!shouldProceed || !mounted) {
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -148,13 +225,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         return;
       }
 
-      _showMessage('회원 권한을 저장했어.');
+      _showMessage('회원 권한을 저장했어요. 목록을 새 기준으로 다시 불러옵니다.');
       await _reload(selectUid: user.uid);
     } catch (error) {
       if (!mounted) {
         return;
       }
-      _showMessage('저장하지 못했어.\n$error');
+      _showMessage('저장하지 못했어요.\n$error');
     } finally {
       if (mounted) {
         setState(() {
@@ -162,6 +239,36 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         });
       }
     }
+  }
+
+  Future<bool> _confirmSave(ManagedUserAccount user) async {
+    final roleChanged = user.role != _selectedRole;
+    if (!roleChanged) {
+      return true;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('권한 변경 확인'),
+        content: Text(
+          '${user.primaryName} 계정의 role을 ${user.role} → $_selectedRole 로 변경할까요?\n'
+          '운영 권한은 즉시 반영됩니다.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('변경 저장'),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
   }
 
   void _showMessage(String message) {
@@ -234,6 +341,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       );
     }
 
+    final protectionMessage = _roleProtectionMessage;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -256,7 +365,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             ),
             const SizedBox(height: 16),
             _InfoRow(label: '이메일', value: user.email.isEmpty ? '없음' : user.email),
-            _InfoRow(label: '표시 이름', value: user.displayName.isEmpty ? '없음' : user.displayName),
+            _InfoRow(
+              label: '표시 이름',
+              value: user.displayName.isEmpty ? '없음' : user.displayName,
+            ),
             _InfoRow(label: '닉네임', value: user.nickname.isEmpty ? '없음' : user.nickname),
             _InfoRow(label: '실명', value: user.fullName.isEmpty ? '없음' : user.fullName),
             _InfoRow(
@@ -268,6 +380,19 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               value: _formatDateTime(user.updatedAt),
             ),
             const SizedBox(height: 16),
+            if (protectionMessage != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: Text(protectionMessage),
+              ),
+              const SizedBox(height: 12),
+            ],
             DropdownButtonFormField<String>(
               value: _selectedRole,
               decoration: const InputDecoration(
@@ -279,7 +404,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 DropdownMenuItem(value: 'member', child: Text('member')),
                 DropdownMenuItem(value: 'admin', child: Text('admin')),
               ],
-              onChanged: _isSaving
+              onChanged: _isSaving || _isSelfAdmin
                   ? null
                   : (value) {
                       if (value == null) {
@@ -298,17 +423,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               decoration: const InputDecoration(
                 labelText: 'allowedPaths',
                 hintText: '/admin\n/admin/users\n/admin/watchlist',
-                helperText: '쉼표, 공백, 줄바꿈 모두 가능. 비워두면 빈 배열로 저장돼요.',
+                helperText:
+                    '예) /admin/users, /admin/stocks\n쉼표, 공백, 줄바꿈 모두 가능하며 비워두면 빈 배열로 저장됩니다.',
                 border: OutlineInputBorder(),
               ),
             ),
+            const SizedBox(height: 12),
+            if (!_hasChanges)
+              Text(
+                '현재 저장되지 않은 변경사항이 없어요.',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Colors.blueGrey.shade700,
+                    ),
+              ),
             const SizedBox(height: 16),
             Wrap(
               spacing: 12,
               runSpacing: 12,
               children: [
                 FilledButton.icon(
-                  onPressed: _isSaving ? null : _save,
+                  onPressed: _isSaving || !_hasChanges ? null : _save,
                   icon: _isSaving
                       ? const SizedBox(
                           width: 16,
@@ -385,7 +519,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     if (!mounted) {
                       return;
                     }
-                    _applyUser(filteredUsers.isNotEmpty ? filteredUsers.first : allUsers.first);
+                    _applyUser(
+                      filteredUsers.isNotEmpty ? filteredUsers.first : allUsers.first,
+                    );
                   });
                 }
 

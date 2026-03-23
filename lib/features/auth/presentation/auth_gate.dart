@@ -58,7 +58,17 @@ class _AuthGateState extends State<AuthGate> {
 
         if (_lastEnsuredUid != user.uid) {
           _lastEnsuredUid = user.uid;
-          _ensureProfileFuture = profileRepository.ensureUserProfile(user: user);
+          final pendingSeed = authRepository.takePendingUserProfileSeed(user.uid);
+          // 사용자 프로필 보정 책임은 AuthGate 한 곳에서만 맡아
+          // 로그인 직후 라우팅 진입 전에 1회만 실행한다.
+          _ensureProfileFuture = profileRepository.ensureUserProfile(
+            user: user,
+            nickname: pendingSeed?.nickname ?? '',
+            fullName: pendingSeed?.fullName ?? '',
+            gender: pendingSeed?.gender ?? '',
+            birthDate: pendingSeed?.birthDate ?? '',
+            phoneNumber: pendingSeed?.phoneNumber ?? '',
+          );
         }
         return FutureBuilder<UserProfile>(
           future: _ensureProfileFuture,

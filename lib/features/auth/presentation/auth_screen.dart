@@ -33,8 +33,7 @@ class _AuthScreenState extends State<AuthScreen> {
     }
     final scope = AppScope.of(context);
     final authRepository = scope.authRepository;
-    final profileRepository = scope.userProfileRepository;
-    if (authRepository == null || profileRepository == null) {
+    if (authRepository == null) {
       return;
     }
 
@@ -43,26 +42,18 @@ class _AuthScreenState extends State<AuthScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text.trim();
       if (_isLogin) {
-        final credential = await authRepository.signInWithEmail(
+        await authRepository.signInWithEmail(
           email: email,
           password: password,
         );
-        if (credential.user != null) {
-          await profileRepository.ensureUserProfile(user: credential.user!);
-        }
       } else {
-        final credential = await authRepository.signUpWithEmail(
+        await authRepository.signUpWithEmail(
           email: email,
           password: password,
           displayName: _nameController.text.trim(),
+          nickname: _nicknameController.text.trim(),
+          fullName: _nameController.text.trim(),
         );
-        if (credential.user != null) {
-          await profileRepository.ensureUserProfile(
-            user: credential.user!,
-            nickname: _nicknameController.text.trim(),
-            fullName: _nameController.text.trim(),
-          );
-        }
       }
     } on Exception catch (error) {
       if (!mounted) return;
@@ -79,17 +70,13 @@ class _AuthScreenState extends State<AuthScreen> {
   Future<void> _signInWithGoogle() async {
     final scope = AppScope.of(context);
     final authRepository = scope.authRepository;
-    final profileRepository = scope.userProfileRepository;
-    if (authRepository == null || profileRepository == null) {
+    if (authRepository == null) {
       return;
     }
 
     setState(() => _isLoading = true);
     try {
-      final credential = await authRepository.signInWithGoogle();
-      if (credential.user != null) {
-        await profileRepository.ensureUserProfile(user: credential.user!);
-      }
+      await authRepository.signInWithGoogle();
     } on Exception catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
