@@ -31,29 +31,69 @@ class UserProfileRepository {
     final doc = _userDoc(user.uid);
     final snapshot = await doc.get();
 
-    final baseData = <String, dynamic>{
-      'uid': user.uid,
-      'email': user.email ?? '',
-      'displayName': user.displayName ?? fullName,
-      'photoURL': user.photoURL,
-      'role': 'guest',
-      'allowedPaths': <String>[],
-      'updatedAt': now,
-      'lastLoginAt': now,
-      'nickname': nickname,
-      'fullName': fullName,
-      'gender': '',
-      'birthDate': '',
-      'phoneNumber': user.phoneNumber ?? '',
-    };
-
     if (!snapshot.exists) {
       await doc.set({
-        ...baseData,
+        'uid': user.uid,
+        'email': _resolvedText(user.email),
+        'displayName': _resolvedText(user.displayName ?? fullName),
+        'photoURL': user.photoURL,
+        'role': 'guest',
+        'allowedPaths': <String>[],
+        'updatedAt': now,
+        'lastLoginAt': now,
         'createdAt': now,
+        'nickname': _resolvedText(nickname),
+        'fullName': _resolvedText(fullName),
+        'gender': '',
+        'birthDate': '',
+        'phoneNumber': _resolvedText(user.phoneNumber),
       }, SetOptions(merge: true));
     } else {
-      await doc.set(baseData, SetOptions(merge: true));
+      final existing = snapshot.data() ?? const <String, dynamic>{};
+      final updateData = <String, dynamic>{
+        'uid': user.uid,
+        'updatedAt': now,
+        'lastLoginAt': now,
+      };
+
+      _putIfMissingOrBlank(
+        updateData,
+        existing: existing,
+        key: 'email',
+        value: user.email,
+      );
+      _putIfMissingOrBlank(
+        updateData,
+        existing: existing,
+        key: 'displayName',
+        value: user.displayName ?? fullName,
+      );
+      _putIfMissingOrBlank(
+        updateData,
+        existing: existing,
+        key: 'photoURL',
+        value: user.photoURL,
+      );
+      _putIfMissingOrBlank(
+        updateData,
+        existing: existing,
+        key: 'nickname',
+        value: nickname,
+      );
+      _putIfMissingOrBlank(
+        updateData,
+        existing: existing,
+        key: 'fullName',
+        value: fullName,
+      );
+      _putIfMissingOrBlank(
+        updateData,
+        existing: existing,
+        key: 'phoneNumber',
+        value: user.phoneNumber,
+      );
+
+      await doc.set(updateData, SetOptions(merge: true));
     }
 
     final refreshed = await doc.get();
@@ -96,6 +136,23 @@ class UserProfileRepository {
       updatedAt: _toDateTime(data['updatedAt']),
       lastLoginAt: _toDateTime(data['lastLoginAt']),
     );
+  }
+
+  void _putIfMissingOrBlank(
+    Map<String, dynamic> data, {
+    required Map<String, dynamic> existing,
+    required String key,
+    required Object? value,
+  }) {
+    final current = _resolvedText(existing[key]);
+    final next = _resolvedText(value);
+    if (current.isEmpty && next.isNotEmpty) {
+      data[key] = next;
+    }
+  }
+
+  String _resolvedText(Object? value) {
+    return value?.toString().trim() ?? '';
   }
 
   DateTime? _toDateTime(dynamic value) {

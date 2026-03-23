@@ -7,6 +7,7 @@ import '../../user/domain/feature_access.dart';
 import '../../user/domain/user_profile.dart';
 import 'admin_watchlist_editor_screen.dart';
 import 'admin_watchlist_preview_screen.dart';
+import 'user_management_screen.dart';
 import 'widgets/admin_action_placeholders.dart';
 
 class AdminHubScreen extends StatefulWidget {
@@ -126,6 +127,22 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
             Card(
               child: Column(
                 children: [
+                  ListTile(
+                    leading: const Icon(Icons.manage_accounts_outlined),
+                    title: const Text('회원 관리'),
+                    subtitle: const Text(
+                      'users 계정 목록을 조회하고 guest/member/admin 권한과 allowedPaths를 수정합니다.',
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: hasFirebase
+                        ? () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const UserManagementScreen(),
+                              ),
+                            )
+                        : null,
+                  ),
+                  const Divider(height: 1),
                   ListTile(
                     leading: const Icon(Icons.edit_note_rounded),
                     title: const Text('운영 관심종목 편집'),

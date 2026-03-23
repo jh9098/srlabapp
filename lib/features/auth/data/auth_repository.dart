@@ -166,39 +166,188 @@ class AuthRepository {
     final now = FieldValue.serverTimestamp();
     final ref = _firestore.collection('users').doc(user.uid);
     final snapshot = await ref.get();
-    final exists = snapshot.exists;
 
-    final resolvedEmail = (email ?? user.email ?? '').trim();
-    final resolvedDisplayName = (displayName ?? user.displayName ?? '').trim();
+    if (!snapshot.exists) {
+      await ref.set(_buildInitialUserDocument(
+        user,
+        now: now,
+        email: email,
+        displayName: displayName,
+        nickname: nickname,
+        fullName: fullName,
+        gender: gender,
+        birthDate: birthDate,
+        phoneNumber: phoneNumber,
+      ));
+      return;
+    }
 
+    final existing = snapshot.data() ?? const <String, dynamic>{};
+    final updateData = _buildExistingUserUpdate(
+      user,
+      existing: existing,
+      now: now,
+      email: email,
+      displayName: displayName,
+      nickname: nickname,
+      fullName: fullName,
+      gender: gender,
+      birthDate: birthDate,
+      phoneNumber: phoneNumber,
+    );
+
+    if (updateData.isEmpty) {
+      return;
+    }
+
+    await ref.set(updateData, SetOptions(merge: true));
+  }
+
+  Map<String, dynamic> _buildInitialUserDocument(
+    User user, {
+    required FieldValue now,
+    String? email,
+    String? displayName,
+    String? nickname,
+    String? fullName,
+    String? gender,
+    String? birthDate,
+    String? phoneNumber,
+  }) {
     final data = <String, dynamic>{
       'uid': user.uid,
-      'email': resolvedEmail,
-      'displayName': resolvedDisplayName,
-      'photoURL': user.photoURL ?? '',
+      'role': 'guest',
+      'allowedPaths': <String>[],
+      'createdAt': now,
+      'updatedAt': now,
+      'lastLoginAt': now,
+      'email': _resolvedText(email, user.email),
+      'displayName': _resolvedText(displayName, user.displayName),
+      'photoURL': user.photoURL,
+      'nickname': _normalizedOptionalText(nickname),
+      'fullName': _normalizedOptionalText(fullName),
+      'gender': _normalizedOptionalText(gender),
+      'birthDate': _normalizedOptionalText(birthDate),
+      'phoneNumber': _resolvedText(phoneNumber, user.phoneNumber),
+    };
+
+    return data;
+  }
+
+  Map<String, dynamic> _buildExistingUserUpdate(
+    User user, {
+    required Map<String, dynamic> existing,
+    required FieldValue now,
+    String? email,
+    String? displayName,
+    String? nickname,
+    String? fullName,
+    String? gender,
+    String? birthDate,
+    String? phoneNumber,
+  }) {
+    final data = <String, dynamic>{
+      'uid': user.uid,
       'updatedAt': now,
       'lastLoginAt': now,
     };
 
-    if (!exists) {
-      data.addAll({
-        'role': 'guest',
-        'allowedPaths': <String>[],
-        'createdAt': now,
-        'nickname': (nickname ?? '').trim(),
-        'fullName': (fullName ?? '').trim(),
-        'gender': (gender ?? '').trim(),
-        'birthDate': (birthDate ?? '').trim(),
-        'phoneNumber': (phoneNumber ?? '').trim(),
-      });
-    } else {
-      if (nickname != null) data['nickname'] = nickname.trim();
-      if (fullName != null) data['fullName'] = fullName.trim();
-      if (gender != null) data['gender'] = gender.trim();
-      if (birthDate != null) data['birthDate'] = birthDate.trim();
-      if (phoneNumber != null) data['phoneNumber'] = phoneNumber.trim();
-    }
+    _putIfMissingOrBlank(
+      data,
+      existing: existing,
+      key: 'email',
+      nextValue: _resolvedText(email, user.email),
+    );
+    _putIfMissingOrBlank(
+      data,
+      existing: existing,
+      key: 'displayName',
+      nextValue: _resolvedText(displayName, user.displayName),
+    );
+    _putIfMissingOrBlank(
+      data,
+      existing: existing,
+      key: 'photoURL',
+      nextValue: user.photoURL,
+    );
 
-    await ref.set(data, SetOptions(merge: true));
+    _putIfProvidedAndMissingOrBlank(
+      data,
+      existing: existing,
+      key: 'nickname',
+      nextValue: nickname,
+    );
+    _putIfProvidedAndMissingOrBlank(
+      data,
+      existing: existing,
+      key: 'fullName',
+      nextValue: fullName,
+    );
+    _putIfProvidedAndMissingOrBlank(
+      data,
+      existing: existing,
+      key: 'gender',
+      nextValue: gender,
+    );
+    _putIfProvidedAndMissingOrBlank(
+      data,
+      existing: existing,
+      key: 'birthDate',
+      nextValue: birthDate,
+    );
+    _putIfProvidedAndMissingOrBlank(
+      data,
+      existing: existing,
+      key: 'phoneNumber',
+      nextValue: phoneNumber ?? user.phoneNumber,
+    );
+
+    return data;
+  }
+
+  void _putIfMissingOrBlank(
+    Map<String, dynamic> data, {
+    required Map<String, dynamic> existing,
+    required String key,
+    required String? nextValue,
+  }) {
+    final normalized = _normalizedOptionalText(nextValue);
+    final current = _normalizedOptionalText(existing[key]);
+    if (current == null && normalized != null) {
+      data[key] = normalized;
+    }
+  }
+
+  void _putIfProvidedAndMissingOrBlank(
+    Map<String, dynamic> data, {
+    required Map<String, dynamic> existing,
+    required String key,
+    required String? nextValue,
+  }) {
+    if (nextValue == null) {
+      return;
+    }
+    _putIfMissingOrBlank(
+      data,
+      existing: existing,
+      key: key,
+      nextValue: nextValue,
+    );
+  }
+
+  String _resolvedText(String? primary, String? fallback) {
+    final primaryText = _normalizedOptionalText(primary);
+    if (primaryText != null) {
+      return primaryText;
+    }
+    return _normalizedOptionalText(fallback) ?? '';
+  }
+
+  String? _normalizedOptionalText(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isEmpty) {
+      return null;
+    }
+    return text;
   }
 }
