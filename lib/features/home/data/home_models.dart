@@ -8,6 +8,7 @@ class HomeFeaturedStockModel {
     required this.stockName,
     required this.currentPrice,
     required this.changePct,
+    required this.supportPrice,
     required this.status,
     required this.summary,
   });
@@ -17,6 +18,7 @@ class HomeFeaturedStockModel {
   final String stockName;
   final double currentPrice;
   final double changePct;
+  final double? supportPrice;
   final StatusBadgeModel status;
   final String summary;
 
@@ -27,6 +29,7 @@ class HomeFeaturedStockModel {
       stockName: json['stock_name'] as String? ?? '',
       currentPrice: parseJsonDouble(json['current_price']),
       changePct: parseJsonDouble(json['change_pct']),
+      supportPrice: parseNullableJsonDouble(json['support_price']),
       status: StatusBadgeModel.fromJson((json['status'] as Map<String, dynamic>?) ?? const {}),
       summary: parseJsonString(json['summary'], fallback: '운영자 코멘트가 아직 없습니다.'),
     );

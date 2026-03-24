@@ -222,9 +222,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
 
               const SizedBox(height: 24),
-              const _SectionHeader(
+              _SectionHeader(
                 title: '오늘의 관찰 종목',
-                subtitle: '지금 빠르게 확인할 종목입니다.',
+                trailingLabel: '${data.featuredStocks.length}종목',
               ),
               const SizedBox(height: 12),
               if (payload.isFallback)
@@ -245,12 +245,15 @@ class _HomeScreenState extends State<HomeScreen> {
               else
                 ...data.featuredStocks.map(
                   (item) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: StockCard(
                       name: item.stockName,
                       code: item.stockCode,
                       price: item.currentPrice,
                       changePct: item.changePct,
+                      supportPrice: item.supportPrice,
+                      severity: item.status.severity,
+                      compact: true,
                       status: StatusBadge(status: item.status),
                       summary: item.summary,
                       onTap: () => Navigator.of(context).push(
@@ -404,13 +407,15 @@ class _HomeScreenPayload {
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.title,
-    required this.subtitle,
     this.action,
+    this.subtitle,
+    this.trailingLabel,
   });
 
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final Widget? action;
+  final String? trailingLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -427,16 +432,26 @@ class _SectionHeader extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                     ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Colors.grey.shade700,
-                    ),
-              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitle!,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey.shade700,
+                      ),
+                ),
+              ],
             ],
           ),
         ),
+        if (trailingLabel != null)
+          Text(
+            trailingLabel!,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
         if (action != null) action!,
       ],
     );

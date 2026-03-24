@@ -12,11 +12,15 @@ class PushMessageRouter {
     return _navigator.openTargetPath(route);
   }
 
-  void showForeground(RemoteMessage message) {
+  void showForeground(
+    RemoteMessage message, {
+    String? titleOverride,
+    String? bodyOverride,
+  }) {
     final notification = message.notification;
     _navigator.showForegroundMessage(
-      title: notification?.title ?? '새 알림',
-      body: notification?.body ?? '중요한 상태 변화가 도착했습니다.',
+      title: titleOverride ?? notification?.title ?? '새 알림',
+      body: bodyOverride ?? notification?.body ?? '중요한 상태 변화가 도착했습니다.',
       onTap: () {
         handleMessage(message);
       },

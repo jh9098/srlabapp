@@ -76,6 +76,10 @@ class FirebaseHomeRepository {
     final priceSummary = parseFirestorePriceSummary(priceData);
     final supportLines = parseFirestoreDoubleList(watchData['supportLines']);
     final resistanceLines = parseFirestoreDoubleList(watchData['resistanceLines']);
+    final supportPrice = _resolveSupportPrice(
+      watchData: watchData,
+      supportLines: supportLines,
+    );
 
     return HomeFeaturedStockModel(
       watchlistDocId: watchlistDoc.id,
@@ -83,6 +87,7 @@ class FirebaseHomeRepository {
       stockName: (watchData['name'] as String?) ?? (priceData['name'] as String?) ?? ticker,
       currentPrice: priceSummary.currentPrice,
       changePct: priceSummary.changePct,
+      supportPrice: supportPrice,
       status: _resolveStatus(
         currentPrice: priceSummary.currentPrice,
         supportLines: supportLines,
@@ -197,5 +202,19 @@ class FirebaseHomeRepository {
     final gaps = levels.map((level) => ((currentPrice - level).abs() / level) * 100).toList();
     gaps.sort();
     return gaps.first;
+  }
+
+  double? _resolveSupportPrice({
+    required Map<String, dynamic> watchData,
+    required List<double> supportLines,
+  }) {
+    final supportPrice = parseNullableJsonDouble(watchData['support_price']);
+    if (supportPrice != null && supportPrice > 0) {
+      return supportPrice;
+    }
+    if (supportLines.isEmpty) {
+      return null;
+    }
+    return supportLines.first;
   }
 }

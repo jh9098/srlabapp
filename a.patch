@@ -1,0 +1,1166 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/lib/core/push/push_message_router.dart b/lib/core/push/push_message_router.dart
+index a6b04983c65fc9e7a8db5669bff5c7f8833d02b3..8fd0384ffb0a02191e229a8b6111583cc89b4a97 100644
+--- a/lib/core/push/push_message_router.dart
++++ b/lib/core/push/push_message_router.dart
+@@ -1,38 +1,42 @@
+ import 'package:firebase_messaging/firebase_messaging.dart';
+ 
+ import '../navigation/app_navigator.dart';
+ 
+ class PushMessageRouter {
+   const PushMessageRouter(this._navigator);
+ 
+   final AppNavigator _navigator;
+ 
+   Future<void> handleMessage(RemoteMessage message) {
+     final route = _resolveRoute(message);
+     return _navigator.openTargetPath(route);
+   }
+ 
+-  void showForeground(RemoteMessage message) {
++  void showForeground(
++    RemoteMessage message, {
++    String? titleOverride,
++    String? bodyOverride,
++  }) {
+     final notification = message.notification;
+     _navigator.showForegroundMessage(
+-      title: notification?.title ?? '새 알림',
+-      body: notification?.body ?? '중요한 상태 변화가 도착했습니다.',
++      title: titleOverride ?? notification?.title ?? '새 알림',
++      body: bodyOverride ?? notification?.body ?? '중요한 상태 변화가 도착했습니다.',
+       onTap: () {
+         handleMessage(message);
+       },
+     );
+   }
+ 
+   String? _resolveRoute(RemoteMessage message) {
+     final data = message.data;
+     final route = data['route'];
+     if (route is String && route.isNotEmpty) {
+       return route;
+     }
+     final stockCode = data['stock_code'];
+     if (stockCode is String && stockCode.isNotEmpty) {
+       return '/stocks/$stockCode';
+     }
+     return '/notifications';
+   }
+ }
+diff --git a/lib/core/push/push_notification_service.dart b/lib/core/push/push_notification_service.dart
+index b177d7dcc79da6a8a6f62b8e3bface520a6393be..1a4216ba860aa36ec682680dfc0b2a0b5613a0bc 100644
+--- a/lib/core/push/push_notification_service.dart
++++ b/lib/core/push/push_notification_service.dart
+@@ -1,50 +1,55 @@
+ import 'package:firebase_core/firebase_core.dart';
+ import 'package:firebase_messaging/firebase_messaging.dart';
+ import 'package:flutter/foundation.dart';
+ import 'package:flutter/material.dart';
++import 'package:shared_preferences/shared_preferences.dart';
+ 
+ import '../config/app_config.dart';
+ import '../navigation/app_navigator.dart';
+ import '../network/api_client.dart';
++import '../utils/formatters.dart';
+ import 'push_message_router.dart';
+ 
+ class PushNotificationBootstrapResult {
+   const PushNotificationBootstrapResult({
+     required this.isConfigured,
+     required this.didRegisterToken,
+     required this.message,
+     this.deviceTokenPreview,
+   });
+ 
+   final bool isConfigured;
+   final bool didRegisterToken;
+   final String message;
+   final String? deviceTokenPreview;
+ }
+ 
+ class PushNotificationService {
++  static const double kSupportNearThresholdPct = 0.03;
++  static const Duration kSupportNearCooldown = Duration(hours: 24);
++
+   PushNotificationService({
+     required AppConfig config,
+     required ApiClient apiClient,
+     required AppNavigator appNavigator,
+   })  : _config = config,
+         _apiClient = apiClient,
+         _messageRouter = PushMessageRouter(appNavigator);
+ 
+   final AppConfig _config;
+   final ApiClient _apiClient;
+   final PushMessageRouter _messageRouter;
+   bool _listenersBound = false;
+ 
+   Future<PushNotificationBootstrapResult> bootstrap() async {
+     if (!_config.isFirebaseConfigured) {
+       return const PushNotificationBootstrapResult(
+         isConfigured: false,
+         didRegisterToken: false,
+         message: 'Firebase 설정값이 없어 푸시 초기화를 건너뜁니다.',
+       );
+     }
+ 
+     await ensureFirebaseInitialized(_config);
+ 
+     final messaging = FirebaseMessaging.instance;
+@@ -94,83 +99,176 @@ class PushNotificationService {
+ 
+   Future<void> deactivateCurrentToken() async {
+     if (!_config.isFirebaseConfigured) {
+       return;
+     }
+     await ensureFirebaseInitialized(_config);
+     final token = await FirebaseMessaging.instance.getToken(
+       vapidKey: _config.firebaseWebVapidKey.isEmpty ? null : _config.firebaseWebVapidKey,
+     );
+     if (token == null || token.isEmpty) {
+       return;
+     }
+     await _apiClient.post(
+       'me/device-tokens/deactivate',
+       requiresUser: true,
+       body: {'device_token': token},
+     );
+   }
+ 
+   Future<void> _bindListeners() async {
+     if (_listenersBound) {
+       return;
+     }
+     _listenersBound = true;
+ 
+-    FirebaseMessaging.onMessage.listen((message) {
++    FirebaseMessaging.onMessage.listen((message) async {
+       debugPrint('Foreground push received: ${message.messageId} ${message.data}');
+-      _messageRouter.showForeground(message);
++      final handled = await _tryHandleSupportNearForeground(message);
++      if (!handled) {
++        _messageRouter.showForeground(message);
++      }
+     });
+     FirebaseMessaging.onMessageOpenedApp.listen((message) {
+       debugPrint('Push opened app: ${message.data}');
+       _messageRouter.handleMessage(message);
+     });
+     FirebaseMessaging.instance.onTokenRefresh.listen(_registerToken);
+   }
+ 
+   Future<void> _registerToken(String token) {
+     return _apiClient.post(
+       'me/device-tokens',
+       requiresUser: true,
+       body: {
+         'device_token': token,
+         'platform': _platformLabel(),
+         'provider': 'fcm',
+         'device_label': 'flutter-${defaultTargetPlatform.name}',
+         'app_version': '1.0.0+1',
+       },
+     );
+   }
+ 
++  Future<bool> _tryHandleSupportNearForeground(RemoteMessage message) async {
++    final payload = SupportNearPushPayload.fromMessageData(message.data);
++    if (payload == null) {
++      return false;
++    }
++
++    if (payload.distanceRatio.abs() > kSupportNearThresholdPct) {
++      return false;
++    }
++
++    final dedupeKey = '${payload.stockCode}_${payload.supportPrice.toStringAsFixed(2)}';
++    final blocked = await _isBlockedByCooldown(dedupeKey);
++    if (blocked) {
++      debugPrint('Skip duplicate support-near push within 24h: $dedupeKey');
++      return true;
++    }
++
++    await _markCooldown(dedupeKey);
++    _messageRouter.showForeground(
++      message,
++      titleOverride: '[${payload.stockName}] 지지선 근접 ⚠️',
++      bodyOverride:
++          '현재가 ${Formatters.price(payload.currentPrice)} — 지지선(${Formatters.price(payload.supportPrice)})까지 ${payload.formattedDistance}',
++    );
++    return true;
++  }
++
++  Future<bool> _isBlockedByCooldown(String key) async {
++    final prefs = await SharedPreferences.getInstance();
++    final ts = prefs.getInt('support_near_alert_$key');
++    if (ts == null) {
++      return false;
++    }
++    final previous = DateTime.fromMillisecondsSinceEpoch(ts);
++    final now = DateTime.now();
++    return now.difference(previous) < kSupportNearCooldown;
++  }
++
++  Future<void> _markCooldown(String key) async {
++    final prefs = await SharedPreferences.getInstance();
++    await prefs.setInt(
++      'support_near_alert_$key',
++      DateTime.now().millisecondsSinceEpoch,
++    );
++  }
++
+   String _platformLabel() {
+     if (kIsWeb) {
+       return 'web';
+     }
+     return defaultTargetPlatform.name;
+   }
+ }
+ 
++class SupportNearPushPayload {
++  const SupportNearPushPayload({
++    required this.stockCode,
++    required this.stockName,
++    required this.currentPrice,
++    required this.supportPrice,
++  });
++
++  final String stockCode;
++  final String stockName;
++  final double currentPrice;
++  final double supportPrice;
++
++  double get distanceRatio => (currentPrice - supportPrice) / supportPrice;
++
++  String get formattedDistance {
++    final pct = distanceRatio * 100;
++    return '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%';
++  }
++
++  static SupportNearPushPayload? fromMessageData(Map<String, dynamic> data) {
++    final supportRaw = data['support_price']?.toString();
++    final currentRaw = data['current_price']?.toString();
++    final code = data['stock_code']?.toString() ?? '';
++    if (supportRaw == null || currentRaw == null || code.isEmpty) {
++      return null;
++    }
++
++    final supportPrice = double.tryParse(supportRaw);
++    final currentPrice = double.tryParse(currentRaw);
++    if (supportPrice == null || currentPrice == null || supportPrice <= 0) {
++      return null;
++    }
++
++    final stockName = (data['stock_name']?.toString() ?? '').trim();
++    return SupportNearPushPayload(
++      stockCode: code,
++      stockName: stockName.isEmpty ? code : stockName,
++      currentPrice: currentPrice,
++      supportPrice: supportPrice,
++    );
++  }
++}
++
+ Future<void> ensureFirebaseInitialized(AppConfig config) async {
+   if (Firebase.apps.isNotEmpty) {
+     return;
+   }
+   await Firebase.initializeApp(options: _buildFirebaseOptions(config));
+ }
+ 
+ FirebaseOptions _buildFirebaseOptions(AppConfig config) {
+   final appId = _resolveAppId(config);
+   return FirebaseOptions(
+     apiKey: config.firebaseApiKey,
+     appId: appId,
+     messagingSenderId: config.firebaseMessagingSenderId,
+     projectId: config.firebaseProjectId,
+     authDomain: config.firebaseAuthDomain.isEmpty ? null : config.firebaseAuthDomain,
+     storageBucket: config.firebaseStorageBucket.isEmpty ? null : config.firebaseStorageBucket,
+     measurementId: config.firebaseMeasurementId.isEmpty ? null : config.firebaseMeasurementId,
+     iosBundleId: config.firebaseIosBundleId.isEmpty ? null : config.firebaseIosBundleId,
+   );
+ }
+ 
+ String _resolveAppId(AppConfig config) {
+   if (kIsWeb && config.firebaseWebAppId.isNotEmpty) {
+     return config.firebaseWebAppId;
+   }
+diff --git a/lib/core/widgets/status_badge.dart b/lib/core/widgets/status_badge.dart
+index 137ce2df72339b00daefe814b5836f9853671bbe..00dfc547620974f3a29724ae0f38274e49a813ea 100644
+--- a/lib/core/widgets/status_badge.dart
++++ b/lib/core/widgets/status_badge.dart
+@@ -1,48 +1,79 @@
+ import 'package:flutter/material.dart';
+ 
+ import '../../features/shared/models/common_models.dart';
+ 
+ class StatusBadge extends StatelessWidget {
+-  const StatusBadge({super.key, required this.status});
++  const StatusBadge({
++    super.key,
++    required this.status,
++    this.showIcon = false,
++  });
+ 
+   final StatusBadgeModel status;
++  final bool showIcon;
+ 
+   @override
+   Widget build(BuildContext context) {
+     final palette = _palette(status.severity);
+     return Container(
+       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+       decoration: BoxDecoration(
+         color: palette.background,
+         borderRadius: BorderRadius.circular(999),
+       ),
+-      child: Text(
+-        status.label,
+-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
++      child: Row(
++        mainAxisSize: MainAxisSize.min,
++        children: [
++          if (showIcon) ...[
++            Icon(
++              _iconForSeverity(status.severity),
++              size: 14,
+               color: palette.foreground,
+-              fontWeight: FontWeight.w700,
+             ),
++            const SizedBox(width: 4),
++          ],
++          Text(
++            status.label,
++            style: Theme.of(context).textTheme.labelMedium?.copyWith(
++                  color: palette.foreground,
++                  fontWeight: FontWeight.w700,
++                ),
++          ),
++        ],
+       ),
+     );
+   }
+ 
+   _BadgePalette _palette(String severity) {
+     switch (severity) {
+       case 'positive':
+         return const _BadgePalette(Color(0xFFDCFCE7), Color(0xFF166534));
+       case 'warning':
+         return const _BadgePalette(Color(0xFFFFEDD5), Color(0xFF9A3412));
+       case 'watch':
+         return const _BadgePalette(Color(0xFFDBEAFE), Color(0xFF1D4ED8));
+       default:
+         return const _BadgePalette(Color(0xFFE2E8F0), Color(0xFF334155));
+     }
+   }
++
++  IconData _iconForSeverity(String severity) {
++    switch (severity) {
++      case 'positive':
++        return Icons.check_circle_rounded;
++      case 'warning':
++        return Icons.warning_amber_rounded;
++      case 'watch':
++        return Icons.remove_red_eye_outlined;
++      default:
++        return Icons.info_outline_rounded;
++    }
++  }
+ }
+ 
+ class _BadgePalette {
+   const _BadgePalette(this.background, this.foreground);
+ 
+   final Color background;
+   final Color foreground;
+ }
+diff --git a/lib/core/widgets/stock_card.dart b/lib/core/widgets/stock_card.dart
+index 7155aac6a6c756f6c9e9bff9bf3f07b16dd9bd26..122d438f9d4a38dc9bc453ddbada170c98ec2013 100644
+--- a/lib/core/widgets/stock_card.dart
++++ b/lib/core/widgets/stock_card.dart
+@@ -1,102 +1,237 @@
+ import 'package:flutter/material.dart';
+ 
+ import '../utils/formatters.dart';
++import 'support_distance_bar.dart';
+ 
+ class StockCard extends StatelessWidget {
+   const StockCard({
+     super.key,
+     required this.name,
+     required this.code,
+     required this.price,
+     required this.changePct,
+     required this.status,
+     required this.summary,
++    this.supportPrice,
++    this.severity = 'neutral',
++    this.compact = false,
+     this.trailing,
+     this.onTap,
+     this.subtitle,
+   });
+ 
+   final String name;
+   final String code;
+   final double price;
+   final double changePct;
++  final double? supportPrice;
++  final String severity;
+   final Widget status;
+   final String summary;
++  final bool compact;
+   final Widget? trailing;
+   final VoidCallback? onTap;
+   final Widget? subtitle;
+ 
+   @override
+   Widget build(BuildContext context) {
+     final positive = changePct >= 0;
+     return Card(
+       child: InkWell(
+         borderRadius: BorderRadius.circular(20),
+         onTap: onTap,
+         child: Padding(
+-          padding: const EdgeInsets.all(16),
+-          child: Column(
+-            crossAxisAlignment: CrossAxisAlignment.start,
+-            children: [
+-              Row(
+-                crossAxisAlignment: CrossAxisAlignment.start,
+-                children: [
+-                  Expanded(
+-                    child: Column(
++          padding: compact
++              ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10)
++              : const EdgeInsets.all(16),
++          child: compact
++              ? _CompactStockCardBody(
++                  name: name,
++                  code: code,
++                  price: price,
++                  changePct: changePct,
++                  supportPrice: supportPrice,
++                  trailing: trailing,
++                  severity: severity,
++                )
++              : Column(
++                  crossAxisAlignment: CrossAxisAlignment.start,
++                  children: [
++                    Row(
+                       crossAxisAlignment: CrossAxisAlignment.start,
++                      children: [
++                        Expanded(
++                          child: Column(
++                            crossAxisAlignment: CrossAxisAlignment.start,
++                            children: [
++                              Text(
++                                name,
++                                style: Theme.of(context).textTheme.titleMedium
++                                    ?.copyWith(fontWeight: FontWeight.w700),
++                              ),
++                              const SizedBox(height: 4),
++                              Text(
++                                code,
++                                style: Theme.of(context).textTheme.bodySmall
++                                    ?.copyWith(color: Colors.grey.shade600),
++                              ),
++                            ],
++                          ),
++                        ),
++                        if (trailing != null) trailing!,
++                      ],
++                    ),
++                    const SizedBox(height: 12),
++                    Wrap(
++                      spacing: 8,
++                      runSpacing: 8,
++                      crossAxisAlignment: WrapCrossAlignment.center,
+                       children: [
+                         Text(
+-                          name,
+-                          style: Theme.of(context).textTheme.titleMedium
++                          Formatters.price(price),
++                          style: Theme.of(context).textTheme.titleLarge
+                               ?.copyWith(fontWeight: FontWeight.w700),
+                         ),
+-                        const SizedBox(height: 4),
+                         Text(
+-                          code,
+-                          style: Theme.of(context).textTheme.bodySmall
+-                              ?.copyWith(color: Colors.grey.shade600),
++                          Formatters.percent(changePct),
++                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
++                                color: positive ? const Color(0xFFDC2626) : const Color(0xFF2563EB),
++                                fontWeight: FontWeight.w700,
++                              ),
+                         ),
++                        status,
+                       ],
+                     ),
+-                  ),
+-                  if (trailing != null) trailing!,
+-                ],
+-              ),
+-              const SizedBox(height: 12),
+-              Wrap(
+-                spacing: 8,
+-                runSpacing: 8,
+-                crossAxisAlignment: WrapCrossAlignment.center,
++                    if (subtitle != null) ...[
++                      const SizedBox(height: 12),
++                      subtitle!,
++                    ],
++                    const SizedBox(height: 12),
++                    Text(
++                      summary,
++                      style: Theme.of(context).textTheme.bodyMedium
++                          ?.copyWith(color: Colors.grey.shade800),
++                    ),
++                  ],
++                ),
++        ),
++      ),
++    );
++  }
++
++}
++
++class _CompactStockCardBody extends StatelessWidget {
++  const _CompactStockCardBody({
++    required this.name,
++    required this.code,
++    required this.price,
++    required this.changePct,
++    required this.supportPrice,
++    required this.trailing,
++    required this.severity,
++  });
++
++  final String name;
++  final String code;
++  final double price;
++  final double changePct;
++  final double? supportPrice;
++  final Widget? trailing;
++  final String severity;
++
++  @override
++  Widget build(BuildContext context) {
++    final positive = changePct >= 0;
++    final changeColor = positive ? const Color(0xFFDC2626) : const Color(0xFF2563EB);
++    final theme = Theme.of(context);
++
++    return Column(
++      crossAxisAlignment: CrossAxisAlignment.start,
++      children: [
++        Row(
++          children: [
++            _SeverityDot(severity: severity),
++            const SizedBox(width: 8),
++            Expanded(
++              child: Row(
+                 children: [
+-                  Text(
+-                    Formatters.price(price),
+-                    style: Theme.of(context).textTheme.titleLarge
+-                        ?.copyWith(fontWeight: FontWeight.w700),
++                  Flexible(
++                    child: Text(
++                      name,
++                      maxLines: 1,
++                      overflow: TextOverflow.ellipsis,
++                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
++                    ),
+                   ),
++                  const SizedBox(width: 6),
+                   Text(
+-                    Formatters.percent(changePct),
+-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+-                          color: positive ? const Color(0xFFDC2626) : const Color(0xFF2563EB),
+-                          fontWeight: FontWeight.w700,
+-                        ),
++                    code,
++                    style: theme.textTheme.labelSmall?.copyWith(
++                      color: theme.colorScheme.onSurfaceVariant,
++                    ),
+                   ),
+-                  status,
+                 ],
+               ),
+-              if (subtitle != null) ...[
+-                const SizedBox(height: 12),
+-                subtitle!,
+-              ],
+-              const SizedBox(height: 12),
+-              Text(
+-                summary,
+-                style: Theme.of(context).textTheme.bodyMedium
+-                    ?.copyWith(color: Colors.grey.shade800),
++            ),
++            const SizedBox(width: 8),
++            Text(
++              Formatters.price(price),
++              style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
++            ),
++            const SizedBox(width: 8),
++            Text(
++              Formatters.percent(changePct),
++              style: theme.textTheme.labelMedium?.copyWith(
++                color: changeColor,
++                fontWeight: FontWeight.w700,
+               ),
++            ),
++            if (trailing != null) ...[
++              const SizedBox(width: 6),
++              trailing!,
+             ],
+-          ),
++          ],
+         ),
++        if (supportPrice != null) ...[
++          const SizedBox(height: 10),
++          SupportDistanceBar(
++            currentPrice: price,
++            supportPrice: supportPrice!,
++          ),
++        ],
++      ],
++    );
++  }
++}
++
++class _SeverityDot extends StatelessWidget {
++  const _SeverityDot({required this.severity});
++
++  final String severity;
++
++  @override
++  Widget build(BuildContext context) {
++    return Container(
++      width: 8,
++      height: 8,
++      decoration: BoxDecoration(
++        color: _severityColor(severity),
++        shape: BoxShape.circle,
+       ),
+     );
+   }
++
++  Color _severityColor(String severity) {
++    switch (severity) {
++      case 'positive':
++        return const Color(0xFF22C55E);
++      case 'warning':
++        return const Color(0xFFF59E0B);
++      case 'watch':
++        return const Color(0xFF3B82F6);
++      default:
++        return const Color(0xFF94A3B8);
++    }
++  }
+ }
+diff --git a/lib/core/widgets/support_distance_bar.dart b/lib/core/widgets/support_distance_bar.dart
+new file mode 100644
+index 0000000000000000000000000000000000000000..a44ebd91e55a804866aa4fce048ec6a83827eb8e
+--- /dev/null
++++ b/lib/core/widgets/support_distance_bar.dart
+@@ -0,0 +1,94 @@
++import 'package:flutter/material.dart';
++
++import '../utils/formatters.dart';
++
++class SupportDistanceBar extends StatelessWidget {
++  const SupportDistanceBar({
++    super.key,
++    required this.currentPrice,
++    required this.supportPrice,
++  });
++
++  final double currentPrice;
++  final double supportPrice;
++
++  @override
++  Widget build(BuildContext context) {
++    if (supportPrice <= 0) {
++      return const SizedBox.shrink();
++    }
++
++    final theme = Theme.of(context);
++    final ratio = (currentPrice - supportPrice) / supportPrice;
++    final clamped = ratio.clamp(0.0, 1.0).toDouble();
++    final status = _resolveStatus(ratio);
++
++    return Row(
++      children: [
++        Text(
++          '지지',
++          style: theme.textTheme.labelSmall?.copyWith(
++            color: theme.colorScheme.onSurfaceVariant,
++            fontWeight: FontWeight.w700,
++          ),
++        ),
++        const SizedBox(width: 6),
++        Text(
++          Formatters.price(supportPrice),
++          style: theme.textTheme.labelMedium?.copyWith(
++            color: theme.colorScheme.onSurfaceVariant,
++            fontWeight: FontWeight.w600,
++          ),
++        ),
++        const SizedBox(width: 10),
++        Expanded(
++          child: ClipRRect(
++            borderRadius: BorderRadius.circular(999),
++            child: LinearProgressIndicator(
++              minHeight: 7,
++              value: clamped,
++              backgroundColor: theme.colorScheme.surfaceContainerHighest,
++              valueColor: AlwaysStoppedAnimation<Color>(status.color),
++            ),
++          ),
++        ),
++        const SizedBox(width: 10),
++        Text(
++          '${status.label} ${_distanceLabel(ratio)}',
++          style: theme.textTheme.labelSmall?.copyWith(
++            color: status.color,
++            fontWeight: FontWeight.w700,
++          ),
++        ),
++      ],
++    );
++  }
++
++  String _distanceLabel(double ratio) {
++    final pct = (ratio * 100).abs();
++    if (ratio < 0) {
++      return '-${pct.toStringAsFixed(1)}%';
++    }
++    return '+${pct.toStringAsFixed(1)}%';
++  }
++
++  _SupportDistanceStatus _resolveStatus(double ratio) {
++    if (ratio < 0) {
++      return _SupportDistanceStatus(label: '이탈', color: Colors.red.shade400);
++    }
++    if (ratio <= 0.03) {
++      return _SupportDistanceStatus(label: '근접', color: Colors.red.shade400);
++    }
++    if (ratio <= 0.07) {
++      return _SupportDistanceStatus(label: '주의', color: Colors.orange.shade400);
++    }
++    return _SupportDistanceStatus(label: '여유', color: Colors.green.shade400);
++  }
++}
++
++class _SupportDistanceStatus {
++  const _SupportDistanceStatus({required this.label, required this.color});
++
++  final String label;
++  final Color color;
++}
+diff --git a/lib/features/home/data/firebase_home_repository.dart b/lib/features/home/data/firebase_home_repository.dart
+index e0094b382170097466d484d1a3e2f39fed38dd1d..496464a4f3274c88d975d275da40defe425d08c3 100644
+--- a/lib/features/home/data/firebase_home_repository.dart
++++ b/lib/features/home/data/firebase_home_repository.dart
+@@ -54,57 +54,62 @@ class FirebaseHomeRepository {
+       foreignNetBuy: HomeMarketSnapshotModel(
+         title: '외국인 순매수',
+         items: foreignNetBuy,
+       ),
+       institutionNetBuy: HomeMarketSnapshotModel(
+         title: '기관 순매수',
+         items: institutionNetBuy,
+       ),
+       themes: themes,
+       recentContents: const [],
+     );
+   }
+ 
+   Future<HomeFeaturedStockModel> _buildFeaturedStock(
+     QueryDocumentSnapshot<Map<String, dynamic>> watchlistDoc,
+   ) async {
+     final watchData = watchlistDoc.data();
+     final ticker = normalizeTicker(watchData['ticker']);
+     final priceSnapshot = ticker.isEmpty
+         ? null
+         : await _firestore.collection('stock_prices').doc(ticker).get();
+     final priceData = priceSnapshot?.data() ?? const <String, dynamic>{};
+     final priceSummary = parseFirestorePriceSummary(priceData);
+     final supportLines = parseFirestoreDoubleList(watchData['supportLines']);
+     final resistanceLines = parseFirestoreDoubleList(watchData['resistanceLines']);
++    final supportPrice = _resolveSupportPrice(
++      watchData: watchData,
++      supportLines: supportLines,
++    );
+ 
+     return HomeFeaturedStockModel(
+       watchlistDocId: watchlistDoc.id,
+       stockCode: ticker,
+       stockName: (watchData['name'] as String?) ?? (priceData['name'] as String?) ?? ticker,
+       currentPrice: priceSummary.currentPrice,
+       changePct: priceSummary.changePct,
++      supportPrice: supportPrice,
+       status: _resolveStatus(
+         currentPrice: priceSummary.currentPrice,
+         supportLines: supportLines,
+         resistanceLines: resistanceLines,
+       ),
+       summary: (watchData['memo'] as String?)?.trim().isNotEmpty == true
+           ? (watchData['memo'] as String).trim()
+           : '운영 메모가 아직 없습니다.',
+     );
+   }
+ 
+   Future<DocumentSnapshot<Map<String, dynamic>>> _latestDoc(String collection) {
+     return _firestore.collection(collection).doc('latest').get();
+   }
+ 
+   String _buildHeadline({
+     required DocumentSnapshot<Map<String, dynamic>> popular,
+     required DocumentSnapshot<Map<String, dynamic>> foreign,
+     required DocumentSnapshot<Map<String, dynamic>> institution,
+   }) {
+     final popularNames = _extractNames(popular.data());
+     final foreignNames = _extractNames(foreign.data());
+     final institutionNames = _extractNames(institution.data());
+ 
+     final chunks = <String>[];
+@@ -176,26 +181,40 @@ class FirebaseHomeRepository {
+     if (nearestSupportGap != null && nearestSupportGap <= 2) {
+       return const StatusBadgeModel(
+         code: 'TESTING_SUPPORT',
+         label: '지지선 근접',
+         severity: 'watch',
+       );
+     }
+     if (nearestResistanceGap != null && nearestResistanceGap <= 2) {
+       return const StatusBadgeModel(
+         code: 'RESISTANCE_NEAR',
+         label: '저항선 근접',
+         severity: 'warning',
+       );
+     }
+     return const StatusBadgeModel(code: 'REUSABLE', label: '관찰 중', severity: 'neutral');
+   }
+ 
+   double? _nearestGapPercent(double currentPrice, List<double> levels) {
+     if (levels.isEmpty || currentPrice <= 0) {
+       return null;
+     }
+     final gaps = levels.map((level) => ((currentPrice - level).abs() / level) * 100).toList();
+     gaps.sort();
+     return gaps.first;
+   }
++
++  double? _resolveSupportPrice({
++    required Map<String, dynamic> watchData,
++    required List<double> supportLines,
++  }) {
++    final supportPrice = parseNullableJsonDouble(watchData['support_price']);
++    if (supportPrice != null && supportPrice > 0) {
++      return supportPrice;
++    }
++    if (supportLines.isEmpty) {
++      return null;
++    }
++    return supportLines.first;
++  }
+ }
+diff --git a/lib/features/home/data/home_models.dart b/lib/features/home/data/home_models.dart
+index f050e5aaf9eecd05ad7357eca58ccf5586dc3ea0..83faa1ed7c84cbf3b546570635964a2be1733278 100644
+--- a/lib/features/home/data/home_models.dart
++++ b/lib/features/home/data/home_models.dart
+@@ -1,54 +1,57 @@
+ import '../../../core/utils/json_parsers.dart';
+ import '../../shared/models/common_models.dart';
+ 
+ class HomeFeaturedStockModel {
+   const HomeFeaturedStockModel({
+     required this.watchlistDocId,
+     required this.stockCode,
+     required this.stockName,
+     required this.currentPrice,
+     required this.changePct,
++    required this.supportPrice,
+     required this.status,
+     required this.summary,
+   });
+ 
+   final String watchlistDocId;
+   final String stockCode;
+   final String stockName;
+   final double currentPrice;
+   final double changePct;
++  final double? supportPrice;
+   final StatusBadgeModel status;
+   final String summary;
+ 
+   factory HomeFeaturedStockModel.fromJson(Map<String, dynamic> json) {
+     return HomeFeaturedStockModel(
+       watchlistDocId: json['watchlist_doc_id'] as String? ?? '',
+       stockCode: json['stock_code'] as String? ?? '',
+       stockName: json['stock_name'] as String? ?? '',
+       currentPrice: parseJsonDouble(json['current_price']),
+       changePct: parseJsonDouble(json['change_pct']),
++      supportPrice: parseNullableJsonDouble(json['support_price']),
+       status: StatusBadgeModel.fromJson((json['status'] as Map<String, dynamic>?) ?? const {}),
+       summary: parseJsonString(json['summary'], fallback: '운영자 코멘트가 아직 없습니다.'),
+     );
+   }
+ }
+ 
+ class HomeWatchlistSignalSummaryModel {
+   const HomeWatchlistSignalSummaryModel({
+     required this.supportNearCount,
+     required this.resistanceNearCount,
+     required this.warningCount,
+   });
+ 
+   final int supportNearCount;
+   final int resistanceNearCount;
+   final int warningCount;
+ 
+   factory HomeWatchlistSignalSummaryModel.fromJson(Map<String, dynamic> json) {
+     return HomeWatchlistSignalSummaryModel(
+       supportNearCount: parseJsonInt(json['support_near_count']),
+       resistanceNearCount: parseJsonInt(json['resistance_near_count']),
+       warningCount: parseJsonInt(json['warning_count']),
+     );
+   }
+ }
+diff --git a/lib/features/home/presentation/home_screen.dart b/lib/features/home/presentation/home_screen.dart
+index 45e948b5b7f1cb6e1fa43ab78f513a6a19c19385..70f72516acc85f51996cf62c46c3052844f2d139 100644
+--- a/lib/features/home/presentation/home_screen.dart
++++ b/lib/features/home/presentation/home_screen.dart
+@@ -200,79 +200,82 @@ class _HomeScreenState extends State<HomeScreen> {
+                         Text(
+                           _todayLabel(), // 아래 헬퍼 함수 참조
+                           style: const TextStyle(
+                             fontSize: 10,
+                             color: Color(0xFF64748B),
+                           ),
+                         ),
+                       ],
+                     ),
+                     const SizedBox(height: 12),
+                     // 헤드라인 본문
+                     Text(
+                       data.marketHeadline,
+                       style: const TextStyle(
+                         fontSize: 15,
+                         color: Color(0xFFE2E8F0),
+                         height: 1.6,
+                         fontWeight: FontWeight.w500,
+                       ),
+                     ),
+                   ],
+                 ),
+               ),
+ 
+               const SizedBox(height: 24),
+-              const _SectionHeader(
++              _SectionHeader(
+                 title: '오늘의 관찰 종목',
+-                subtitle: '지금 빠르게 확인할 종목입니다.',
++                trailingLabel: '${data.featuredStocks.length}종목',
+               ),
+               const SizedBox(height: 12),
+               if (payload.isFallback)
+                 EmptyState(
+                   title: '신호 데이터를 분석하고 있습니다',
+                   description: '지지선 신호를 실시간으로 계산하고 있습니다.\n잠시 후 자동으로 업데이트됩니다.',
+                   actionLabel: '다시 조회',
+                   onAction: _refresh,
+                 )
+               else if (data.featuredStocks.isEmpty)
+                 EmptyState(
+                   title: '오늘의 관찰 종목을 준비 중입니다',
+                   description: '잠시 후 다시 확인해 주세요.\n관심종목 탭에서 개별 종목은 바로 확인할 수 있습니다.',
+                   actionLabel: '다시 조회',
+                   onAction: _refresh,
+                 )
+ 
+               else
+                 ...data.featuredStocks.map(
+                   (item) => Padding(
+-                    padding: const EdgeInsets.only(bottom: 12),
++                    padding: const EdgeInsets.only(bottom: 8),
+                     child: StockCard(
+                       name: item.stockName,
+                       code: item.stockCode,
+                       price: item.currentPrice,
+                       changePct: item.changePct,
++                      supportPrice: item.supportPrice,
++                      severity: item.status.severity,
++                      compact: true,
+                       status: StatusBadge(status: item.status),
+                       summary: item.summary,
+                       onTap: () => Navigator.of(context).push(
+                         MaterialPageRoute(
+                           builder: (_) => StockDetailScreen(
+                             stockCode: item.stockCode,
+                             watchlistDocId: item.watchlistDocId.isEmpty
+                                 ? null
+                                 : item.watchlistDocId,
+                           ),
+                         ),
+                       ),
+                     ),
+                   ),
+                 ),
+               const SizedBox(height: 12),
+               const _SectionHeader(
+                 title: '관심종목 신호 요약',
+                 subtitle: '내가 본 종목 중 오늘 체크할 개수입니다.',
+               ),
+               const SizedBox(height: 12),
+               Row(
+                 children: [
+                   Expanded(
+                     child: _SignalCard(
+@@ -382,83 +385,95 @@ class _HomeScreenState extends State<HomeScreen> {
+                   ),
+                 ),
+             ],
+           ),
+         );
+       },
+     );
+   }
+ }
+ 
+ class _HomeScreenPayload {
+   const _HomeScreenPayload({
+     required this.data,
+     required this.isFallback,
+     required this.fallbackReason,
+   });
+ 
+   final HomeResponseModel data;
+   final bool isFallback;
+   final String? fallbackReason;
+ }
+ 
+ class _SectionHeader extends StatelessWidget {
+   const _SectionHeader({
+     required this.title,
+-    required this.subtitle,
+     this.action,
++    this.subtitle,
++    this.trailingLabel,
+   });
+ 
+   final String title;
+-  final String subtitle;
++  final String? subtitle;
+   final Widget? action;
++  final String? trailingLabel;
+ 
+   @override
+   Widget build(BuildContext context) {
+     return Row(
+       crossAxisAlignment: CrossAxisAlignment.start,
+       children: [
+         Expanded(
+           child: Column(
+             crossAxisAlignment: CrossAxisAlignment.start,
+             children: [
+               Text(
+                 title,
+                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                       fontWeight: FontWeight.w700,
+                     ),
+               ),
+-              const SizedBox(height: 4),
+-              Text(
+-                subtitle,
+-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+-                      color: Colors.grey.shade700,
+-                    ),
+-              ),
++              if (subtitle != null) ...[
++                const SizedBox(height: 4),
++                Text(
++                  subtitle!,
++                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
++                        color: Colors.grey.shade700,
++                      ),
++                ),
++              ],
+             ],
+           ),
+         ),
++        if (trailingLabel != null)
++          Text(
++            trailingLabel!,
++            style: Theme.of(context).textTheme.labelLarge?.copyWith(
++                  color: Colors.grey.shade600,
++                  fontWeight: FontWeight.w700,
++                ),
++          ),
+         if (action != null) action!,
+       ],
+     );
+   }
+ }
+ 
+ enum SignalCardType { support, resistance, warning }
+  
+ class _SignalCard extends StatelessWidget {
+   const _SignalCard({
+     required this.label,
+     required this.count,
+     required this.type,
+   });
+  
+   final String label;
+   final int count;
+   final SignalCardType type;
+  
+   @override
+   Widget build(BuildContext context) {
+     final palette = _palette();
+     return Container(
+       decoration: BoxDecoration(
+         color: palette.background,
+diff --git a/pubspec.yaml b/pubspec.yaml
+index daf6235a6f7c7a57d3c0a0f856b1da1d6b5cbf1d..441c7a4f8c10853b4619266d3481addfd6ef235e 100644
+--- a/pubspec.yaml
++++ b/pubspec.yaml
+@@ -1,27 +1,28 @@
+ name: srlabapp
+ description: "지지저항Lab Flutter MVP 앱"
+ publish_to: 'none'
+ version: 1.0.0+1
+ 
+ environment:
+   sdk: ^3.11.1
+ 
+ dependencies:
+   flutter:
+     sdk: flutter
+   cupertino_icons: ^1.0.8
+   firebase_core: ^4.1.1
+   firebase_auth: ^6.0.2
+   cloud_firestore: ^6.0.1
+   google_sign_in: ^7.1.1
+   firebase_messaging: ^16.0.1
++  shared_preferences: ^2.5.3
+   http: ^1.5.0
+   url_launcher: ^6.3.2
+ 
+ dev_dependencies:
+   flutter_test:
+     sdk: flutter
+   flutter_lints: ^6.0.0
+ 
+ flutter:
+   uses-material-design: true
+ 
+EOF
+)

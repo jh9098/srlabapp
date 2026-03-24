@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import '../../features/shared/models/common_models.dart';
 
 class StatusBadge extends StatelessWidget {
-  const StatusBadge({super.key, required this.status});
+  const StatusBadge({
+    super.key,
+    required this.status,
+    this.showIcon = false,
+  });
 
   final StatusBadgeModel status;
+  final bool showIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -16,12 +21,25 @@ class StatusBadge extends StatelessWidget {
         color: palette.background,
         borderRadius: BorderRadius.circular(999),
       ),
-      child: Text(
-        status.label,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showIcon) ...[
+            Icon(
+              _iconForSeverity(status.severity),
+              size: 14,
               color: palette.foreground,
-              fontWeight: FontWeight.w700,
             ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            status.label,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: palette.foreground,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
       ),
     );
   }
@@ -36,6 +54,19 @@ class StatusBadge extends StatelessWidget {
         return const _BadgePalette(Color(0xFFDBEAFE), Color(0xFF1D4ED8));
       default:
         return const _BadgePalette(Color(0xFFE2E8F0), Color(0xFF334155));
+    }
+  }
+
+  IconData _iconForSeverity(String severity) {
+    switch (severity) {
+      case 'positive':
+        return Icons.check_circle_rounded;
+      case 'warning':
+        return Icons.warning_amber_rounded;
+      case 'watch':
+        return Icons.remove_red_eye_outlined;
+      default:
+        return Icons.info_outline_rounded;
     }
   }
 }

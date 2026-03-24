@@ -2,10 +2,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import '../navigation/app_navigator.dart';
 import '../network/api_client.dart';
+import '../utils/formatters.dart';
 import 'push_message_router.dart';
 
 class PushNotificationBootstrapResult {
@@ -23,6 +25,9 @@ class PushNotificationBootstrapResult {
 }
 
 class PushNotificationService {
+  static const double kSupportNearThresholdPct = 0.03;
+  static const Duration kSupportNearCooldown = Duration(hours: 24);
+
   PushNotificationService({
     required AppConfig config,
     required ApiClient apiClient,
@@ -116,9 +121,12 @@ class PushNotificationService {
     }
     _listenersBound = true;
 
-    FirebaseMessaging.onMessage.listen((message) {
+    FirebaseMessaging.onMessage.listen((message) async {
       debugPrint('Foreground push received: ${message.messageId} ${message.data}');
-      _messageRouter.showForeground(message);
+      final handled = await _tryHandleSupportNearForeground(message);
+      if (!handled) {
+        _messageRouter.showForeground(message);
+      }
     });
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       debugPrint('Push opened app: ${message.data}');
@@ -141,11 +149,101 @@ class PushNotificationService {
     );
   }
 
+  Future<bool> _tryHandleSupportNearForeground(RemoteMessage message) async {
+    final payload = SupportNearPushPayload.fromMessageData(message.data);
+    if (payload == null) {
+      return false;
+    }
+
+    if (payload.distanceRatio.abs() > kSupportNearThresholdPct) {
+      return false;
+    }
+
+    final dedupeKey = '${payload.stockCode}_${payload.supportPrice.toStringAsFixed(2)}';
+    final blocked = await _isBlockedByCooldown(dedupeKey);
+    if (blocked) {
+      debugPrint('Skip duplicate support-near push within 24h: $dedupeKey');
+      return true;
+    }
+
+    await _markCooldown(dedupeKey);
+    _messageRouter.showForeground(
+      message,
+      titleOverride: '[${payload.stockName}] 지지선 근접 ⚠️',
+      bodyOverride:
+          '현재가 ${Formatters.price(payload.currentPrice)} — 지지선(${Formatters.price(payload.supportPrice)})까지 ${payload.formattedDistance}',
+    );
+    return true;
+  }
+
+  Future<bool> _isBlockedByCooldown(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    final ts = prefs.getInt('support_near_alert_$key');
+    if (ts == null) {
+      return false;
+    }
+    final previous = DateTime.fromMillisecondsSinceEpoch(ts);
+    final now = DateTime.now();
+    return now.difference(previous) < kSupportNearCooldown;
+  }
+
+  Future<void> _markCooldown(String key) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      'support_near_alert_$key',
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
   String _platformLabel() {
     if (kIsWeb) {
       return 'web';
     }
     return defaultTargetPlatform.name;
+  }
+}
+
+class SupportNearPushPayload {
+  const SupportNearPushPayload({
+    required this.stockCode,
+    required this.stockName,
+    required this.currentPrice,
+    required this.supportPrice,
+  });
+
+  final String stockCode;
+  final String stockName;
+  final double currentPrice;
+  final double supportPrice;
+
+  double get distanceRatio => (currentPrice - supportPrice) / supportPrice;
+
+  String get formattedDistance {
+    final pct = distanceRatio * 100;
+    return '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(1)}%';
+  }
+
+  static SupportNearPushPayload? fromMessageData(Map<String, dynamic> data) {
+    final supportRaw = data['support_price']?.toString();
+    final currentRaw = data['current_price']?.toString();
+    final code = data['stock_code']?.toString() ?? '';
+    if (supportRaw == null || currentRaw == null || code.isEmpty) {
+      return null;
+    }
+
+    final supportPrice = double.tryParse(supportRaw);
+    final currentPrice = double.tryParse(currentRaw);
+    if (supportPrice == null || currentPrice == null || supportPrice <= 0) {
+      return null;
+    }
+
+    final stockName = (data['stock_name']?.toString() ?? '').trim();
+    return SupportNearPushPayload(
+      stockCode: code,
+      stockName: stockName.isEmpty ? code : stockName,
+      currentPrice: currentPrice,
+      supportPrice: supportPrice,
+    );
   }
 }
 
