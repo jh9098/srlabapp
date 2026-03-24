@@ -7,8 +7,6 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_state.dart';
-import '../../../core/widgets/status_badge.dart';
-import '../../../core/widgets/stock_card.dart';
 import '../../app/app_scope.dart';
 import '../../stock/presentation/stock_detail_screen.dart';
 import '../../theme/data/theme_repository.dart';
@@ -17,6 +15,7 @@ import '../../theme/presentation/theme_screen.dart';
 import '../data/firebase_home_repository.dart';
 import '../data/home_models.dart';
 import '../data/home_repository.dart';
+import 'widgets/featured_stock_tile.dart';
 import 'widgets/market_snapshot_section.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -113,13 +112,8 @@ class _HomeScreenState extends State<HomeScreen> {
               else ...[
                 ...featured.map((item) => Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: StockCard(
-                        name: item.stockName,
-                        code: item.stockCode,
-                        price: item.currentPrice,
-                        changePct: item.changePct,
-                        status: StatusBadge(status: item.status),
-                        summary: item.summary,
+                      child: FeaturedStockTile(
+                        item: item,
                         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: item.stockCode, watchlistDocId: item.watchlistDocId.isEmpty ? null : item.watchlistDocId))),
                       ),
                     )),
