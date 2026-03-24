@@ -6,6 +6,10 @@ import '../../../core/widgets/loading_state.dart';
 import '../../app/app_scope.dart';
 import '../data/admin_watchlist_repository.dart';
 
+// ──────────────────────────────────────────────────────────────────────────────
+// 리스트 화면 (진입점)
+// ──────────────────────────────────────────────────────────────────────────────
+
 class AdminWatchlistEditorScreen extends StatefulWidget {
   const AdminWatchlistEditorScreen({super.key});
 
@@ -17,25 +21,7 @@ class AdminWatchlistEditorScreen extends StatefulWidget {
 class _AdminWatchlistEditorScreenState
     extends State<AdminWatchlistEditorScreen> {
   final AdminWatchlistRepository _repository = AdminWatchlistRepository();
-
   late Future<List<AdminWatchlistItem>> _future;
-
-  AdminWatchlistItem? _selectedItem;
-
-  final TextEditingController _tickerController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _memoController = TextEditingController();
-  final TextEditingController _supportLinesController = TextEditingController();
-  final TextEditingController _resistanceLinesController =
-      TextEditingController();
-
-  bool _isPublic = true;
-  bool _alertEnabled = true;
-  bool _portfolioReady = false;
-
-  bool _isSaving = false;
-  bool _isDeleting = false;
-  bool _initialized = false;
 
   @override
   void initState() {
@@ -43,13 +29,282 @@ class _AdminWatchlistEditorScreenState
     _future = _load();
   }
 
+  Future<List<AdminWatchlistItem>> _load() =>
+      _repository.fetchItems(limit: 100);
+
+  Future<void> _reload() async {
+    setState(() => _future = _load());
+    await _future;
+  }
+
+  Future<void> _openEditor({AdminWatchlistItem? item}) async {
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => _AdminWatchlistItemEditScreen(
+          repository: _repository,
+          initialItem: item,
+        ),
+      ),
+    );
+    if (result == true) await _reload();
+  }
+
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_initialized) {
-      return;
+  Widget build(BuildContext context) {
+    final firebaseEnabled =
+        AppScope.of(context).config.isFirebaseConfigured;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('운영 종목 편집'),
+        actions: [
+          IconButton(
+            onPressed: _reload,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: '새로고침',
+          ),
+        ],
+      ),
+      body: !firebaseEnabled
+          ? const EmptyState(
+              title: 'Firebase 연결이 필요합니다',
+              description: '관리자 편집 기능은 Firestore 연결 후 사용할 수 있습니다.',
+              icon: Icons.cloud_off_outlined,
+            )
+          : FutureBuilder<List<AdminWatchlistItem>>(
+              future: _future,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const LoadingState();
+                }
+                if (snapshot.hasError) {
+                  return ErrorState(
+                    message: '데이터를 불러오지 못했습니다.',
+                    onRetry: _reload,
+                  );
+                }
+
+                final items =
+                    snapshot.data ?? const <AdminWatchlistItem>[];
+
+                if (items.isEmpty) {
+                  return EmptyState(
+                    title: '운영 종목이 없습니다',
+                    description: '+ 버튼을 눌러 첫 번째 종목을 추가해 보세요.',
+                    icon: Icons.add_chart_rounded,
+                    actionLabel: '종목 추가',
+                    onAction: () => _openEditor(),
+                  );
+                }
+
+                return RefreshIndicator(
+                  onRefresh: _reload,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return _WatchlistListTile(
+                        item: item,
+                        onTap: () => _openEditor(item: item),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: firebaseEnabled
+          ? FloatingActionButton.extended(
+              onPressed: () => _openEditor(),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('종목 추가'),
+            )
+          : null,
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 종목 리스트 아이템
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _WatchlistListTile extends StatelessWidget {
+  const _WatchlistListTile({required this.item, required this.onTap});
+
+  final AdminWatchlistItem item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              // 공개/비공개 인디케이터
+              Container(
+                width: 4,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: item.isPublic
+                      ? const Color(0xFF16A34A)
+                      : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          item.name.isEmpty ? item.ticker : item.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          item.ticker,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _SmallChip(
+                          label:
+                              '지지 ${item.supportLines.length}',
+                          color: const Color(0xFF16A34A),
+                        ),
+                        const SizedBox(width: 6),
+                        _SmallChip(
+                          label:
+                              '저항 ${item.resistanceLines.length}',
+                          color: const Color(0xFFDC2626),
+                        ),
+                        const SizedBox(width: 6),
+                        if (item.alertEnabled)
+                          _SmallChip(
+                            label: '알림ON',
+                            color: const Color(0xFF0369A1),
+                          ),
+                      ],
+                    ),
+                    if (item.memo.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        item.memo,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded,
+                  color: Colors.grey),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SmallChip extends StatelessWidget {
+  const _SmallChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 편집 화면 (새 화면으로 push)
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _AdminWatchlistItemEditScreen extends StatefulWidget {
+  const _AdminWatchlistItemEditScreen({
+    required this.repository,
+    this.initialItem,
+  });
+
+  final AdminWatchlistRepository repository;
+  final AdminWatchlistItem? initialItem;
+
+  @override
+  State<_AdminWatchlistItemEditScreen> createState() =>
+      _AdminWatchlistItemEditScreenState();
+}
+
+class _AdminWatchlistItemEditScreenState
+    extends State<_AdminWatchlistItemEditScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _tickerController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _memoController = TextEditingController();
+  final _priceInputController = TextEditingController();
+
+  List<double> _supportLines = [];
+  List<double> _resistanceLines = [];
+  bool _isPublic = true;
+  bool _alertEnabled = true;
+  bool _portfolioReady = false;
+  bool _isSaving = false;
+  bool _isDeleting = false;
+
+  bool get _isEditMode => widget.initialItem != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.initialItem;
+    if (item != null) {
+      _tickerController.text = item.ticker;
+      _nameController.text = item.name;
+      _memoController.text = item.memo;
+      _supportLines = List.from(item.supportLines);
+      _resistanceLines = List.from(item.resistanceLines);
+      _isPublic = item.isPublic;
+      _alertEnabled = item.alertEnabled;
+      _portfolioReady = item.portfolioReady;
     }
-    _initialized = true;
   }
 
   @override
@@ -57,210 +312,161 @@ class _AdminWatchlistEditorScreenState
     _tickerController.dispose();
     _nameController.dispose();
     _memoController.dispose();
-    _supportLinesController.dispose();
-    _resistanceLinesController.dispose();
+    _priceInputController.dispose();
     super.dispose();
   }
 
-  Future<List<AdminWatchlistItem>> _load() {
-    return _repository.fetchItems(limit: 100);
-  }
+  String _fmt(double v) =>
+      v == v.roundToDouble() ? v.toInt().toString() : v.toString();
 
-  Future<void> _reload({String? selectDocId}) async {
-    setState(() {
-      _future = _load();
-    });
-
-    final items = await _future;
-
-    if (!mounted) {
+  void _addPrice(List<double> list, String raw) {
+    final normalized = raw.trim().replaceAll(',', '');
+    final value = double.tryParse(normalized);
+    if (value == null || value <= 0) {
+      _showMessage('올바른 숫자를 입력해 주세요.');
       return;
     }
-
-    if (items.isEmpty) {
-      if (selectDocId == null) {
-        _startCreateMode();
-      }
+    if (list.contains(value)) {
+      _showMessage('이미 추가된 가격입니다.');
       return;
     }
-
-    if (selectDocId != null) {
-      final matched = items.where((e) => e.docId == selectDocId).toList();
-      if (matched.isNotEmpty) {
-        _applyItemToForm(matched.first);
-        return;
-      }
-    }
-
-    if (_selectedItem != null) {
-      final matched = items.where((e) => e.docId == _selectedItem!.docId).toList();
-      if (matched.isNotEmpty) {
-        _applyItemToForm(matched.first);
-        return;
-      }
-    }
-
-    _applyItemToForm(items.first);
-  }
-
-  void _startCreateMode() {
     setState(() {
-      _selectedItem = null;
-      _tickerController.clear();
-      _nameController.clear();
-      _memoController.clear();
-      _supportLinesController.clear();
-      _resistanceLinesController.clear();
-      _isPublic = true;
-      _alertEnabled = true;
-      _portfolioReady = false;
+      list.add(value);
+      list.sort();
     });
+    _priceInputController.clear();
   }
 
-  void _applyItemToForm(AdminWatchlistItem item) {
-    setState(() {
-      _selectedItem = item;
-      _tickerController.text = item.ticker;
-      _nameController.text = item.name;
-      _memoController.text = item.memo;
-      _supportLinesController.text = _formatPriceList(item.supportLines);
-      _resistanceLinesController.text = _formatPriceList(item.resistanceLines);
-      _isPublic = item.isPublic;
-      _alertEnabled = item.alertEnabled;
-      _portfolioReady = item.portfolioReady;
-    });
-  }
+  Widget _buildPriceChipsField({
+    required String label,
+    required List<double> lines,
+    required Color chipColor,
+    required String hintText,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+              fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
 
-  String _formatPriceList(List<double> values) {
-    return values.map(_formatNumber).join(', ');
-  }
+        // 칩 목록
+        if (lines.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              '추가된 가격이 없습니다.',
+              style:
+                  TextStyle(fontSize: 13, color: Colors.grey.shade400),
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: lines.map((price) {
+              return Chip(
+                label: Text(
+                  _fmt(price),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: chipColor,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                backgroundColor:
+                    chipColor.withValues(alpha: 0.08),
+                side: BorderSide(
+                    color: chipColor.withValues(alpha: 0.3)),
+                deleteIcon: Icon(Icons.close,
+                    size: 16, color: chipColor),
+                onDeleted: () =>
+                    setState(() => lines.remove(price)),
+              );
+            }).toList(),
+          ),
 
-  String _formatNumber(double value) {
-    if (value == value.roundToDouble()) {
-      return value.toInt().toString();
-    }
-    return value.toString();
-  }
-
-  List<double> _parsePriceList(String raw, String fieldName) {
-    final text = raw.trim();
-    if (text.isEmpty) {
-      return const <double>[];
-    }
-
-    final tokens = text
-        .split(RegExp(r'[,/\n\r\t ]+'))
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-
-    final result = <double>[];
-
-    for (final token in tokens) {
-      final normalized = token.replaceAll(',', '');
-      final value = double.tryParse(normalized);
-      if (value == null) {
-        throw FormatException('$fieldName 값 "$token" 을 숫자로 해석할 수 없습니다.');
-      }
-      if (value <= 0) {
-        throw FormatException('$fieldName 값은 0보다 커야 합니다.');
-      }
-      result.add(value);
-    }
-
-    final uniqueSorted = result.toSet().toList()..sort();
-    return uniqueSorted;
+        // 입력 + 추가 버튼
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _priceInputController,
+                keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (v) => _addPrice(lines, v),
+                decoration: InputDecoration(
+                  hintText: hintText,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () =>
+                  _addPrice(lines, _priceInputController.text),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                minimumSize: Size.zero,
+              ),
+              child: const Text('추가'),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   Future<void> _save() async {
-    if (_isSaving || _isDeleting) {
-      return;
-    }
-
-    final ticker = _tickerController.text.trim();
-    final name = _nameController.text.trim();
-    final memo = _memoController.text.trim();
-
-    if (ticker.isEmpty) {
-      _showMessage('종목코드를 입력해줘.');
-      return;
-    }
-
-    if (name.isEmpty) {
-      _showMessage('종목명을 입력해줘.');
-      return;
-    }
-
-    List<double> supportLines;
-    List<double> resistanceLines;
-
-    try {
-      supportLines = _parsePriceList(_supportLinesController.text, '지지선');
-      resistanceLines = _parsePriceList(_resistanceLinesController.text, '저항선');
-    } on FormatException catch (e) {
-      _showMessage(e.message);
-      return;
-    } catch (e) {
-      _showMessage('레벨 값을 확인해줘.\n$e');
-      return;
-    }
+    if (_isSaving || _isDeleting) return;
+    if (!_formKey.currentState!.validate()) return;
 
     final item = AdminWatchlistItem(
-      docId: _selectedItem?.docId ?? '',
-      ticker: ticker,
-      name: name,
-      memo: memo,
+      docId: widget.initialItem?.docId ?? '',
+      ticker: _tickerController.text.trim(),
+      name: _nameController.text.trim(),
+      memo: _memoController.text.trim(),
       isPublic: _isPublic,
       alertEnabled: _alertEnabled,
       portfolioReady: _portfolioReady,
-      supportLines: supportLines,
-      resistanceLines: resistanceLines,
-      createdAt: _selectedItem?.createdAt,
-      updatedAt: _selectedItem?.updatedAt,
+      supportLines: List.from(_supportLines),
+      resistanceLines: List.from(_resistanceLines),
+      createdAt: widget.initialItem?.createdAt,
+      updatedAt: widget.initialItem?.updatedAt,
     );
 
-    setState(() {
-      _isSaving = true;
-    });
-
+    setState(() => _isSaving = true);
     try {
-      final savedDocId = await _repository.saveItem(item);
-
-      if (!mounted) {
-        return;
-      }
-
+      await widget.repository.saveItem(item);
+      if (!mounted) return;
       _showMessage(
-        _selectedItem == null ? '운영 관심종목을 추가했어.' : '운영 관심종목을 수정했어.',
-      );
-
-      await _reload(selectDocId: savedDocId);
+          _isEditMode ? '종목을 수정했습니다.' : '종목을 추가했습니다.');
+      Navigator.of(context).pop(true);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      _showMessage('저장하지 못했어.\n$e');
+      if (!mounted) return;
+      _showMessage('저장하지 못했습니다. 다시 시도해 주세요.\n$e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSaving = false;
-        });
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   Future<void> _delete() async {
-    final item = _selectedItem;
-    if (item == null || _isDeleting || _isSaving) {
-      return;
-    }
+    final item = widget.initialItem;
+    if (item == null || _isSaving || _isDeleting) return;
 
     final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('운영 관심종목 삭제'),
+            title: const Text('종목 삭제'),
             content: Text(
-              '${item.name.isEmpty ? item.ticker : item.name} (${item.ticker}) 문서를 삭제할까?',
+              '${item.name.isEmpty ? item.ticker : item.name}(${item.ticker})을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
             ),
             actions: [
               TextButton(
@@ -269,6 +475,9 @@ class _AdminWatchlistEditorScreenState
               ),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                ),
                 child: const Text('삭제'),
               ),
             ],
@@ -276,350 +485,243 @@ class _AdminWatchlistEditorScreenState
         ) ??
         false;
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
-    setState(() {
-      _isDeleting = true;
-    });
-
+    setState(() => _isDeleting = true);
     try {
-      await _repository.deleteItem(item.docId);
-
-      if (!mounted) {
-        return;
-      }
-
-      _showMessage('운영 관심종목을 삭제했어.');
-      _startCreateMode();
-      await _reload();
+      await widget.repository.deleteItem(item.docId);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      _showMessage('삭제하지 못했어.\n$e');
+      if (!mounted) return;
+      _showMessage('삭제하지 못했습니다. 다시 시도해 주세요.\n$e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isDeleting = false;
-        });
-      }
+      if (mounted) setState(() => _isDeleting = false);
     }
   }
 
-  void _showMessage(String message) {
+  void _showMessage(String msg) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(content: Text(message)),
+        SnackBar(
+          content: Text(msg),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
   }
 
-  Widget _buildForm() {
-    final isEditMode = _selectedItem != null;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  isEditMode ? '운영 관심종목 수정' : '운영 관심종목 추가',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                if (isEditMode)
-                  Chip(label: Text('docId ${_selectedItem!.docId}'))
-                else
-                  const Chip(label: Text('신규')),
-              ],
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_isEditMode ? '종목 수정' : '종목 추가'),
+        actions: [
+          if (_isEditMode)
+            IconButton(
+              onPressed: _isSaving || _isDeleting ? null : _delete,
+              icon: _isDeleting
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.delete_outline_rounded),
+              tooltip: '삭제',
+              color: const Color(0xFFDC2626),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _tickerController,
-              decoration: const InputDecoration(
-                labelText: '종목코드',
-                hintText: '예: 005930',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: '종목명',
-                hintText: '예: 삼성전자',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _supportLinesController,
-              minLines: 1,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '지지선',
-                hintText: '예: 61000, 59800, 58500',
-                helperText: '쉼표, 공백, 줄바꿈 모두 가능',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _resistanceLinesController,
-              minLines: 1,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '저항선',
-                hintText: '예: 66000, 68500',
-                helperText: '쉼표, 공백, 줄바꿈 모두 가능',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _memoController,
-              minLines: 3,
-              maxLines: 5,
-              decoration: const InputDecoration(
-                labelText: '운영 메모',
-                hintText: '예: 단기 반등 확인용, 거래대금 조건 병행',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _isPublic,
-              onChanged: (value) => setState(() => _isPublic = value),
-              title: const Text('공개 여부'),
-              subtitle: Text(_isPublic ? '홈/공개 영역에 노출 가능' : '관리자 내부용'),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _alertEnabled,
-              onChanged: (value) => setState(() => _alertEnabled = value),
-              title: const Text('알림 사용'),
-              subtitle: Text(_alertEnabled ? '알림 대상' : '알림 비활성'),
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _portfolioReady,
-              onChanged: (value) => setState(() => _portfolioReady = value),
-              title: const Text('포트폴리오 연결 준비'),
-              subtitle: Text(
-                _portfolioReady ? '포트폴리오 연결 대상' : '포트폴리오 미연결',
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                FilledButton.icon(
-                  onPressed: _isSaving || _isDeleting ? null : _save,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(_isSaving ? '저장 중...' : '저장'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _isSaving || _isDeleting ? null : _startCreateMode,
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text('새 문서 작성'),
-                ),
-                if (isEditMode)
-                  OutlinedButton.icon(
-                    onPressed: _isSaving || _isDeleting ? null : _delete,
-                    icon: _isDeleting
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.delete_outline),
-                    label: Text(_isDeleting ? '삭제 중...' : '삭제'),
+          TextButton(
+            onPressed: _isSaving || _isDeleting ? null : _save,
+            child: _isSaving
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text(
+                    '저장',
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-              ],
+          ),
+        ],
+      ),
+      body: Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // ── 기본 정보 ────────────────────────────────────
+            _SectionLabel(label: '기본 정보'),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    TextFormField(
+                      controller: _tickerController,
+                      decoration: const InputDecoration(
+                        labelText: '종목코드',
+                        hintText: '예: 005930',
+                        prefixIcon:
+                            Icon(Icons.tag_rounded),
+                      ),
+                      validator: (v) =>
+                          (v?.trim().isEmpty ?? true)
+                              ? '종목코드를 입력해 주세요.'
+                              : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        labelText: '종목명',
+                        hintText: '예: 삼성전자',
+                        prefixIcon: Icon(Icons.business_outlined),
+                      ),
+                      validator: (v) =>
+                          (v?.trim().isEmpty ?? true)
+                              ? '종목명을 입력해 주세요.'
+                              : null,
+                    ),
+                  ],
+                ),
+              ),
             ),
+
+            const SizedBox(height: 20),
+
+            // ── 지지선 ────────────────────────────────────────
+            _SectionLabel(label: '지지선'),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: _buildPriceChipsField(
+                  label: '지지 가격 목록',
+                  lines: _supportLines,
+                  chipColor: const Color(0xFF16A34A),
+                  hintText: '예: 61000',
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── 저항선 ────────────────────────────────────────
+            _SectionLabel(label: '저항선'),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: _buildPriceChipsField(
+                  label: '저항 가격 목록',
+                  lines: _resistanceLines,
+                  chipColor: const Color(0xFFDC2626),
+                  hintText: '예: 66000',
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── 운영 메모 ─────────────────────────────────────
+            _SectionLabel(label: '운영 메모'),
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: TextField(
+                  controller: _memoController,
+                  minLines: 3,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    hintText: '예: 단기 반등 확인용, 거래대금 조건 병행',
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── 운영 설정 ─────────────────────────────────────
+            _SectionLabel(label: '운영 설정'),
+            const SizedBox(height: 8),
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('공개'),
+                    subtitle: Text(
+                        _isPublic ? '홈/공개 영역에 노출' : '내부 관리용'),
+                    value: _isPublic,
+                    onChanged: (v) =>
+                        setState(() => _isPublic = v),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('알림 사용'),
+                    subtitle: Text(_alertEnabled ? '알림 대상' : '알림 비활성'),
+                    value: _alertEnabled,
+                    onChanged: (v) =>
+                        setState(() => _alertEnabled = v),
+                  ),
+                  const Divider(height: 1),
+                  SwitchListTile(
+                    title: const Text('포트폴리오 연결'),
+                    subtitle: Text(
+                        _portfolioReady ? '포트폴리오 대상' : '미연결'),
+                    value: _portfolioReady,
+                    onChanged: (v) =>
+                        setState(() => _portfolioReady = v),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 32),
+
+            // 저장 버튼
+            FilledButton.icon(
+              onPressed: _isSaving || _isDeleting ? null : _save,
+              icon: _isSaving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.check_rounded),
+              label: Text(
+                  _isSaving ? '저장 중...' : (_isEditMode ? '수정 완료' : '추가 완료')),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+
+            const SizedBox(height: 32),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildList(List<AdminWatchlistItem> items) {
-    if (items.isEmpty) {
-      return EmptyState(
-        title: '운영 관심종목이 없습니다',
-        description: '새 문서를 추가해서 관리자 쓰기 모드를 시작해줘.',
-        actionLabel: '새 문서 작성',
-        onAction: _startCreateMode,
-      );
-    }
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.label});
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        final isSelected = _selectedItem?.docId == item.docId;
-
-        return Card(
-          color: isSelected ? Colors.blueGrey.shade50 : null,
-          child: ListTile(
-            onTap: () => _applyItemToForm(item),
-            title: Text(item.name.isEmpty ? item.ticker : item.name),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Text(item.ticker),
-                const SizedBox(height: 4),
-                Text(
-                  item.memo.isEmpty ? '운영 메모 없음' : item.memo,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    Chip(label: Text(item.isPublic ? '공개' : '비공개')),
-                    Chip(label: Text(item.alertEnabled ? '알림ON' : '알림OFF')),
-                    Chip(
-                      label: Text(
-                        item.portfolioReady ? '포트폴리오 준비' : '포트폴리오 미연결',
-                      ),
-                    ),
-                    Chip(label: Text('지지선 ${item.supportLines.length}개')),
-                    Chip(label: Text('저항선 ${item.resistanceLines.length}개')),
-                  ],
-                ),
-              ],
-            ),
-            trailing: isSelected
-                ? const Icon(Icons.check_circle_outline)
-                : const Icon(Icons.chevron_right_rounded),
-          ),
-        );
-      },
-    );
-  }
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    final firebaseEnabled = AppScope.of(context).config.isFirebaseConfigured;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('운영 관심종목 편집'),
-        actions: [
-          IconButton(
-            onPressed: _isSaving || _isDeleting ? null : () => _reload(),
-            icon: const Icon(Icons.refresh),
-            tooltip: '새로고침',
-          ),
-        ],
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: Colors.grey.shade500,
+        letterSpacing: 0.5,
       ),
-      body: !firebaseEnabled
-          ? const EmptyState(
-              title: 'Firebase 설정 필요',
-              description: '이 화면은 adminWatchlist Firestore write를 전제로 합니다.',
-            )
-          : FutureBuilder<List<AdminWatchlistItem>>(
-              future: _future,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting &&
-                    !_isSaving &&
-                    !_isDeleting) {
-                  return const LoadingState();
-                }
-
-                if (snapshot.hasError) {
-                  return ErrorState(
-                    message: '운영 관심종목 편집 데이터를 불러오지 못했습니다.\n${snapshot.error}',
-                    onRetry: _reload,
-                  );
-                }
-
-                final items = snapshot.data ?? const <AdminWatchlistItem>[];
-
-                if (_selectedItem == null &&
-                    items.isNotEmpty &&
-                    _tickerController.text.isEmpty &&
-                    _nameController.text.isEmpty) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (!mounted) {
-                      return;
-                    }
-                    _applyItemToForm(items.first);
-                  });
-                }
-
-                return RefreshIndicator(
-                  onRefresh: _reload,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final wide = constraints.maxWidth >= 980;
-
-                      if (wide) {
-                        return Row(
-                          children: [
-                            SizedBox(
-                              width: 420,
-                              child: _buildList(items),
-                            ),
-                            const VerticalDivider(width: 1),
-                            Expanded(
-                              child: ListView(
-                                padding: const EdgeInsets.all(16),
-                                children: [
-                                  _buildForm(),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      }
-
-                      return ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          _buildForm(),
-                          const SizedBox(height: 16),
-                          Text(
-                            '기존 운영 관심종목',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                          ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: items.isEmpty ? 220 : 520,
-                            child: _buildList(items),
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
     );
   }
 }

@@ -1,17 +1,17 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../admin/presentation/admin_hub_screen.dart';
 import '../../app/app_scope.dart';
 import '../../notifications/presentation/notifications_screen.dart';
 import '../../user/domain/feature_access.dart';
 import '../../user/domain/user_profile.dart';
+import '../../../core/theme/theme_mode_controller.dart';
 import 'alert_settings_screen.dart';
 
 class MyScreen extends StatelessWidget {
   const MyScreen({super.key});
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -20,135 +20,265 @@ class MyScreen extends StatelessWidget {
     final authRepository = scope.authRepository;
     final profileRepository = scope.userProfileRepository;
 
+    if (!config.isFirebaseConfigured || authRepository == null || profileRepository == null) {
+      return _buildSimpleLayout(context);
+    }
+
+    return StreamBuilder<User?>(
+      stream: authRepository.authStateChanges(),
+      builder: (context, authSnapshot) {
+        final user = authSnapshot.data;
+
+        if (authSnapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (user == null) {
+          return _buildLoggedOutLayout(context);
+        }
+
+        return StreamBuilder<UserProfile?>(
+          stream: profileRepository.watchProfile(user.uid),
+          builder: (context, profileSnapshot) {
+            final profile = profileSnapshot.data;
+            return _buildLoggedInLayout(
+              context,
+              user: user,
+              profile: profile,
+              onSignOut: authRepository.signOut,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildLoggedOutLayout(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '마이 페이지',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  config.isFirebaseConfigured
-                      ? 'Firebase Auth 계정과 users/{uid} 권한 문서를 기준으로 내 정보를 보여줍니다.'
-                      : '현재는 Firebase 설정이 없어 로컬/API 기반 정보만 표시합니다.',
-                ),
-              ],
+        const SizedBox(height: 24),
+        const _ProfilePlaceholder(),
+        const SizedBox(height: 24),
+        _buildMenuCard(context, profile: null),
+        const SizedBox(height: 16),
+        _buildSettingsCard(context),
+        const SizedBox(height: 16),
+        _buildContactCard(context),
+        const SizedBox(height: 16),
+        _buildAppInfoCard(context, isAdmin: false),
+      ],
+    );
+  }
+
+  Widget _buildSimpleLayout(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildMenuCard(context, profile: null),
+        const SizedBox(height: 16),
+        _buildSettingsCard(context),
+        const SizedBox(height: 16),
+        _buildContactCard(context),
+        const SizedBox(height: 16),
+        _buildAppInfoCard(context, isAdmin: false),
+      ],
+    );
+  }
+
+  Widget _buildLoggedInLayout(
+    BuildContext context, {
+    required User user,
+    required UserProfile? profile,
+    required Future<void> Function() onSignOut,
+  }) {
+    final isAdmin = FeatureAccess.canOpenAdmin(profile);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _ProfileCard(authUser: user, profile: profile, onSignOut: onSignOut),
+        const SizedBox(height: 16),
+        _buildMenuCard(context, profile: profile),
+        if (isAdmin) ...[
+          const SizedBox(height: 16),
+          _AdminCard(profile: profile!),
+        ],
+        const SizedBox(height: 16),
+        _buildSettingsCard(context),
+        const SizedBox(height: 16),
+        _buildContactCard(context),
+        const SizedBox(height: 16),
+        _buildAppInfoCard(context, isAdmin: isAdmin),
+      ],
+    );
+  }
+
+  Widget _buildMenuCard(BuildContext context, {required UserProfile? profile}) {
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.notifications_active_outlined),
+            title: const Text('알림 설정'),
+            subtitle: const Text('지지선 신호 · 테마 · 공지 알림'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AlertSettingsScreen()),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-        if (config.isFirebaseConfigured && authRepository != null && profileRepository != null)
-          StreamBuilder<User?>(
-            stream: authRepository.authStateChanges(),
-            builder: (context, authSnapshot) {
-              final user = authSnapshot.data;
-              if (user == null) {
-                return const Card(
-                  child: ListTile(
-                    leading: Icon(Icons.lock_outline_rounded),
-                    title: Text('로그인이 필요합니다'),
-                    subtitle: Text('Firebase 인증을 완료하면 role/allowedPaths를 여기에 표시합니다.'),
-                  ),
-                );
-              }
-              return StreamBuilder<UserProfile?>(
-                stream: profileRepository.watchProfile(user.uid),
-                builder: (context, profileSnapshot) {
-                  final profile = profileSnapshot.data;
-                  return Column(
-                    children: [
-                      _ProfileCard(
-                        authUser: user,
-                        profile: profile,
-                        onSignOut: authRepository.signOut,
-                      ),
-                      const SizedBox(height: 16),
-                      _FeatureAccessSummary(profile: profile),
-                      if (FeatureAccess.canOpenAdmin(profile)) ...[
-                        const SizedBox(height: 16),
-                        Card(
-                          child: ListTile(
-                            leading: const Icon(Icons.admin_panel_settings_outlined),
-                            title: const Text('관리자 메뉴'),
-                            subtitle: const Text(
-                              '현재 단계에서는 읽기 중심 관리자 화면만 먼저 엽니다.',
-                            ),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: profile == null
-                                ? null
-                                : () => Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => AdminHubScreen(profile: profile),
-                                      ),
-                                    ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  );
-                },
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.notifications_none_rounded),
+            title: const Text('알림함'),
+            subtitle: const Text('신호 이벤트와 운영 공지 이력'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsCard(BuildContext context) {
+    return Card(
+      child: Column(
+        children: [
+          // 다크모드 토글
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: ThemeModeController.instance,
+            builder: (context, mode, _) {
+              final isDark = ThemeModeController.instance.resolvedIsDark(context);
+              return SwitchListTile(
+                secondary: Icon(
+                  isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                ),
+                title: const Text('다크 모드'),
+                subtitle: Text(
+                  mode == ThemeMode.system ? '시스템 설정 따름' : (isDark ? '켜짐' : '꺼짐'),
+                ),
+                value: isDark,
+                onChanged: (_) => ThemeModeController.instance.toggle(),
               );
             },
           ),
-        const SizedBox(height: 16),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.notifications_active_outlined),
-                title: const Text('알림 설정'),
-                subtitle: const Text('가격 신호/테마/운영 공지 알림 범위를 설정합니다.'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const AlertSettingsScreen()),
-                ),
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.notifications_none_rounded),
-                title: const Text('알림함'),
-                subtitle: const Text('신호 이벤트와 운영 공지 이력을 확인합니다.'),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                ),
-              ),
-              const Divider(height: 1),
-              const ListTile(
-                leading: Icon(Icons.contact_support_outlined),
-                title: Text('문의 / 공지'),
-                subtitle: Text('공지와 문의 채널은 운영 준비가 끝나면 이 화면에서 안내됩니다.'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('앱 연결 정보'),
-                const SizedBox(height: 8),
-                Text('환경: ${config.appEnv}'),
-                Text('API: ${config.apiBaseUrl}'),
-                Text('Firebase 설정 여부: ${config.isFirebaseConfigured ? '설정됨' : '미설정'}'),
-                if (!config.isFirebaseConfigured) Text('사용자 식별자: ${config.userIdentifier}'),
-                const SizedBox(height: 12),
-                const Text('버전: 1.0.0+1'),
-              ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContactCard(BuildContext context) {
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.chat_outlined),
+            title: const Text('카카오 오픈채팅'),
+            subtitle: const Text('매매 전략 질문 · 운영 문의'),
+            trailing: const Icon(Icons.open_in_new_rounded, size: 18),
+            onTap: () => _launchUrl(
+              context,
+              // TODO: 실제 카카오 오픈채팅 URL로 교체
+              'https://open.kakao.com/o/srlab',
             ),
           ),
+          const Divider(height: 1),
+          ListTile(
+            leading: const Icon(Icons.send_outlined),
+            title: const Text('텔레그램 채널'),
+            subtitle: const Text('공지 · 실시간 신호 알림'),
+            trailing: const Icon(Icons.open_in_new_rounded, size: 18),
+            onTap: () => _launchUrl(
+              context,
+              // TODO: 실제 텔레그램 채널 URL로 교체
+              'https://t.me/srlab',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppInfoCard(BuildContext context, {required bool isAdmin}) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '앱 버전',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade500,
+                      ),
+                ),
+                Text(
+                  '1.0.0',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade500,
+                      ),
+                ),
+              ],
+            ),
+            // 관리자에게만 연결 정보 표시
+            if (isAdmin) ...[
+              const SizedBox(height: 8),
+              Builder(builder: (context) {
+                final config = AppScope.of(context).config;
+                return Text(
+                  '${config.appEnv} · ${config.isFirebaseConfigured ? 'Firebase 연결됨' : 'Firebase 미설정'}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade400,
+                        fontSize: 11,
+                      ),
+                );
+              }),
+            ],
+          ],
         ),
-      ],
+      ),
+    );
+  }
+
+  Future<void> _launchUrl(BuildContext context, String url) async {
+    final uri = Uri.parse(url);
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('링크를 열 수 없습니다.')),
+        );
+      }
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// 내부 위젯
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _ProfilePlaceholder extends StatelessWidget {
+  const _ProfilePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor:
+              Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+          child: Icon(
+            Icons.person_outline_rounded,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        title: const Text('로그인이 필요합니다'),
+        subtitle: const Text('로그인하면 알림과 관심종목을 관리할 수 있어요.'),
+      ),
     );
   }
 }
@@ -164,65 +294,122 @@ class _ProfileCard extends StatelessWidget {
   final UserProfile? profile;
   final Future<void> Function() onSignOut;
 
-
   String get _avatarLabel {
     final raw = profile?.displayName.isNotEmpty == true
         ? profile!.displayName
         : (authUser.email ?? '?');
-    return raw.isEmpty ? '?' : raw.substring(0, 1);
+    return raw.isEmpty ? '?' : raw.substring(0, 1).toUpperCase();
+  }
+
+  String get _displayName {
+    if (profile?.displayName.isNotEmpty == true) return profile!.displayName;
+    if (authUser.displayName?.isNotEmpty == true) return authUser.displayName!;
+    return authUser.email?.split('@').first ?? '사용자';
+  }
+
+  String get _roleLabel {
+    switch (profile?.role) {
+      case 'admin':
+        return '관리자';
+      case 'member':
+        return '멤버';
+      default:
+        return '게스트';
+    }
+  }
+
+  Color _roleColor(BuildContext context) {
+    switch (profile?.role) {
+      case 'admin':
+        return const Color(0xFF7C3AED);
+      case 'member':
+        return const Color(0xFF0369A1);
+      default:
+        return Colors.grey.shade500;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final allowedPaths = profile?.allowedPaths ?? const <String>[];
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  child: Text(_avatarLabel),
+            // 아바타
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: 0.12),
+              child: Text(
+                _avatarLabel,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              ),
+            ),
+            const SizedBox(width: 14),
+            // 이름 + 이메일
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Text(profile?.displayName.isNotEmpty == true ? profile!.displayName : (authUser.displayName ?? '이름 없음')),
-                      const SizedBox(height: 4),
-                      Text(authUser.email ?? profile?.email ?? '-'),
+                      Flexible(
+                        child: Text(
+                          _displayName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _roleColor(context).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          _roleLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _roleColor(context),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-                FilledButton.tonal(
-                  onPressed: onSignOut,
-                  child: const Text('로그아웃'),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    authUser.email ?? '-',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Chip(label: Text('role: ${profile?.role ?? 'guest'}')),
-                Chip(label: Text((profile?.isAdmin ?? false) ? '관리자' : '일반 사용자')),
-                Chip(label: Text('allowedPaths ${allowedPaths.length}개')),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _InfoRow(label: 'nickname', value: profile?.nickname ?? ''),
-            _InfoRow(label: 'fullName', value: profile?.fullName ?? ''),
-            _InfoRow(label: 'phoneNumber', value: profile?.phoneNumber ?? ''),
-            _InfoRow(label: 'lastLoginAt', value: profile?.lastLoginAt?.toIso8601String() ?? '-'),
-            const SizedBox(height: 8),
-            Text(
-              allowedPaths.isEmpty
-                  ? 'allowedPaths가 비어 있으므로 guest/member 공통 화면만 노출하는 쪽이 안전합니다.'
-                  : 'allowedPaths: ${allowedPaths.join(', ')}',
+            // 로그아웃
+            FilledButton.tonal(
+              onPressed: onSignOut,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                visualDensity: VisualDensity.compact,
+              ),
+              child: const Text('로그아웃', style: TextStyle(fontSize: 13)),
             ),
           ],
         ),
@@ -231,93 +418,44 @@ class _ProfileCard extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
+class _AdminCard extends StatelessWidget {
+  const _AdminCard({required this.profile});
 
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 110, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600))),
-          Expanded(child: Text(value.isEmpty ? '-' : value)),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeatureAccessSummary extends StatelessWidget {
-  const _FeatureAccessSummary({required this.profile});
-
-  final UserProfile? profile;
+  final UserProfile profile;
 
   @override
   Widget build(BuildContext context) {
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '기능 접근 상태',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'allowedPaths 기준으로 현재 계정이 어떤 화면에 들어갈 수 있는지 미리 보여줍니다.',
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _AccessChip(
-                  label: '테마',
-                  unlocked: FeatureAccess.canOpenTheme(profile),
-                ),
-                _AccessChip(
-                  label: '쇼츠',
-                  unlocked: FeatureAccess.canOpenShorts(profile),
-                ),
-                _AccessChip(
-                  label: '관리자',
-                  unlocked: FeatureAccess.canOpenAdmin(profile),
-                ),
-              ],
-            ),
-          ],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: const BorderSide(color: Color(0xFFDDD6FE), width: 1),
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEDE9FE),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Icons.admin_panel_settings_outlined,
+            color: Color(0xFF7C3AED),
+            size: 22,
+          ),
+        ),
+        title: const Text(
+          '관리자 메뉴',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: const Text('종목 편집 · 회원 관리 · 신호 운영'),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => AdminHubScreen(profile: profile),
+          ),
         ),
       ),
-    );
-  }
-}
-
-class _AccessChip extends StatelessWidget {
-  const _AccessChip({
-    required this.label,
-    required this.unlocked,
-  });
-
-  final String label;
-  final bool unlocked;
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(
-        unlocked ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
-        size: 18,
-      ),
-      label: Text('$label ${unlocked ? '열림' : '잠금'}'),
     );
   }
 }

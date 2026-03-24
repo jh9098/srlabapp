@@ -30,6 +30,12 @@ class _HomeScreenState extends State<HomeScreen> {
   FirebaseHomeRepository? _firebaseHomeRepository;
   late ThemeRepository _themeRepository;
   bool _initialized = false;
+  String _todayLabel() {
+    final now = DateTime.now();
+    final weekdays = ['월', '화', '수', '목', '금', '토', '일'];
+    final wd = weekdays[now.weekday - 1];
+    return '${now.month}/${now.day} ($wd)';
+  }
 
   @override
   void didChangeDependencies() {
@@ -44,20 +50,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<_HomeScreenPayload> _load() async {
-    final scope = AppScope.of(context);
     try {
-      if (scope.config.useFirebaseOnly) {
-        if (_firebaseHomeRepository == null) {
-          throw StateError('Firebase 홈 저장소를 사용할 수 없습니다. Firebase 설정(dart-define)을 먼저 확인하세요.');
-        }
-        final data = await _firebaseHomeRepository!.fetchHome();
-        return _HomeScreenPayload(
-          data: data,
-          isFallback: false,
-          fallbackReason: null,
-        );
-      }
-
       final data = _firebaseHomeRepository != null
           ? await _firebaseHomeRepository!.fetchHome()
           : await _homeRepository.fetchHome();
@@ -72,10 +65,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!shouldFallback) rethrow;
 
-      final themes = scope.config.useFirebaseOnly || _firebaseHomeRepository != null
-          ? (await (_firebaseHomeRepository?.fetchHome() ?? Future.error(StateError('Firebase 홈 저장소를 사용할 수 없습니다.')))).themes
-          : await _themeRepository.fetchThemes();
-      final contents = scope.config.useFirebaseOnly ? const <RecentContentModel>[] : await _themeRepository.fetchContents(limit: 4);
+      final themes = await _themeRepository.fetchThemes();
+      final contents = await _themeRepository.fetchContents(limit: 4);
 
       return _HomeScreenPayload(
         isFallback: true,
@@ -146,35 +137,90 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.all(16),
             children: [
               if (payload.isFallback) ...[
-                Card(
-                  color: Colors.amber.shade50,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      '일부 종목의 지지선 상태가 아직 계산되지 않아 홈 종목 카드는 잠시 숨기고 있습니다.\n'
-                      '테마와 콘텐츠는 정상적으로 확인할 수 있습니다.\n'
-                      '사유: ${payload.fallbackReason ?? '상태 계산 대기'}',
-                    ),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFBFDBFE), width: 0.5),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          color: Color(0xFF1D4ED8), size: 20),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          '신호 데이터를 분석하고 있습니다. 테마와 콘텐츠는 지금 바로 확인할 수 있습니다.',
+                          style: TextStyle(
+                            color: Color(0xFF1E3A5F),
+                            fontSize: 13,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+
                 const SizedBox(height: 16),
               ],
-              Text(
-                '오늘의 관찰 포인트',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 라벨
+                    Row(
+                      children: [
+                        Container(
+                          width: 3,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF59E0B),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'TODAY\'S POINT',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF60A5FA),
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.08,
+                          ),
+                        ),
+                        const Spacer(),
+                        // 날짜 표시 (선택)
+                        Text(
+                          _todayLabel(), // 아래 헬퍼 함수 참조
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
                     ),
-              ),
-              const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    data.marketHeadline,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
+                    const SizedBox(height: 12),
+                    // 헤드라인 본문
+                    Text(
+                      data.marketHeadline,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Color(0xFFE2E8F0),
+                        height: 1.6,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+
               const SizedBox(height: 24),
               const _SectionHeader(
                 title: '오늘의 관찰 종목',
@@ -183,19 +229,19 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               if (payload.isFallback)
                 EmptyState(
-                  title: '운영 종목 상태 계산 중',
-                  description:
-                      '지지선 상태가 아직 준비되지 않은 종목이 있어 홈 종목 카드는 잠시 숨겨집니다.\n관심종목 탭이나 종목 검색에서 개별 종목은 계속 확인할 수 있습니다.',
+                  title: '신호 데이터를 분석하고 있습니다',
+                  description: '지지선 신호를 실시간으로 계산하고 있습니다.\n잠시 후 자동으로 업데이트됩니다.',
                   actionLabel: '다시 조회',
                   onAction: _refresh,
                 )
               else if (data.featuredStocks.isEmpty)
                 EmptyState(
-                  title: '추천 종목이 없습니다',
-                  description: '관리자에서 홈 추천 종목을 등록하면 여기에 표시됩니다.',
+                  title: '오늘의 관찰 종목을 준비 중입니다',
+                  description: '잠시 후 다시 확인해 주세요.\n관심종목 탭에서 개별 종목은 바로 확인할 수 있습니다.',
                   actionLabel: '다시 조회',
                   onAction: _refresh,
                 )
+
               else
                 ...data.featuredStocks.map(
                   (item) => Padding(
@@ -232,6 +278,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _SignalCard(
                       label: '지지 확인',
                       count: data.watchlistSignalSummary.supportNearCount,
+                      type: SignalCardType.support,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -239,6 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _SignalCard(
                       label: '저항 근접',
                       count: data.watchlistSignalSummary.resistanceNearCount,
+                      type: SignalCardType.resistance,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -246,10 +294,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: _SignalCard(
                       label: '주의',
                       count: data.watchlistSignalSummary.warningCount,
+                      type: SignalCardType.warning,
                     ),
                   ),
                 ],
               ),
+
               const SizedBox(height: 24),
               MarketSnapshotSection(
                 snapshots: [
@@ -272,11 +322,12 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               if (data.themes.isEmpty)
                 EmptyState(
-                  title: '노출 중인 테마가 없습니다',
-                  description: '관리자에서 테마를 공개하면 홈에 표시됩니다.',
+                  title: '오늘의 테마를 준비 중입니다',
+                  description: '매일 시장 흐름을 분석해 주요 테마를 선정합니다.\n잠시 후 확인해 주세요.',
                   actionLabel: '다시 조회',
                   onAction: _refresh,
                 )
+
               else
                 ...data.themes.map(
                   (theme) => Padding(
@@ -306,11 +357,12 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               if (data.recentContents.isEmpty)
                 EmptyState(
-                  title: '콘텐츠가 아직 없습니다',
-                  description: '관리자에서 콘텐츠를 공개하면 여기에 표시됩니다.',
+                  title: '최근 해설이 없습니다',
+                  description: '새로운 시장 해설과 매매 전략이 업로드되면 여기에 표시됩니다.',
                   actionLabel: '다시 조회',
                   onAction: _refresh,
                 )
+
               else
                 ...data.recentContents.map(
                   (content) => Padding(
@@ -391,33 +443,89 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+enum SignalCardType { support, resistance, warning }
+ 
 class _SignalCard extends StatelessWidget {
   const _SignalCard({
     required this.label,
     required this.count,
+    required this.type,
   });
-
+ 
   final String label;
   final int count;
-
+  final SignalCardType type;
+ 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Text(
-              '$count',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        ),
+    final palette = _palette();
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.background,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: palette.border, width: 0.5),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      child: Column(
+        children: [
+          Text(
+            '$count',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: palette.countColor,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: palette.labelColor,
+                  fontWeight: FontWeight.w500,
+                ),
+            textAlign: TextAlign.center,
+          ),
+        ],
       ),
     );
   }
+ 
+  _SignalPalette _palette() {
+    switch (type) {
+      case SignalCardType.support:
+        return const _SignalPalette(
+          background: Color(0xFFDCFCE7),
+          border: Color(0xFF86EFAC),
+          countColor: Color(0xFF166534),
+          labelColor: Color(0xFF15803D),
+        );
+      case SignalCardType.resistance:
+        return const _SignalPalette(
+          background: Color(0xFFFFEDD5),
+          border: Color(0xFFFDBA74),
+          countColor: Color(0xFF9A3412),
+          labelColor: Color(0xFFC2410C),
+        );
+      case SignalCardType.warning:
+        return const _SignalPalette(
+          background: Color(0xFFFEE2E2),
+          border: Color(0xFFFCA5A5),
+          countColor: Color(0xFF991B1B),
+          labelColor: Color(0xFFB91C1C),
+        );
+    }
+  }
+}
+ 
+class _SignalPalette {
+  const _SignalPalette({
+    required this.background,
+    required this.border,
+    required this.countColor,
+    required this.labelColor,
+  });
+ 
+  final Color background;
+  final Color border;
+  final Color countColor;
+  final Color labelColor;
 }
