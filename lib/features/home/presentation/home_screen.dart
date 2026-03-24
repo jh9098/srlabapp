@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_exception.dart';
-import '../../../core/theme/app_breakpoints.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
@@ -101,7 +100,24 @@ class _HomeScreenState extends State<HomeScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
             children: [
-              _TodayPointCard(todayLabel: _todayLabel(), headline: data.marketHeadline),
+              _TodayPointCard(
+                todayLabel: _todayLabel(),
+                headline: data.marketHeadline,
+                briefs: [
+                  _TodayBrief(
+                    label: '인기종목',
+                    items: data.popularStocks.items,
+                  ),
+                  _TodayBrief(
+                    label: '외국인 관심',
+                    items: data.foreignNetBuy.items,
+                  ),
+                  _TodayBrief(
+                    label: '기관 관심',
+                    items: data.institutionNetBuy.items,
+                  ),
+                ],
+              ),
               const SizedBox(height: AppSpacing.sectionLarge),
               _SectionHeader(title: '오늘의 관찰 종목', trailingLabel: '${data.featuredStocks.length}종목'),
               const SizedBox(height: 10),
@@ -126,18 +142,32 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: AppSpacing.section),
               const _SectionHeader(title: '관심종목 신호 요약', subtitle: '내가 본 종목 중 오늘 체크할 개수입니다.'),
               const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final cards = [
-                    _SignalCard(label: '지지 확인', count: data.watchlistSignalSummary.supportNearCount, type: SignalCardType.support),
-                    _SignalCard(label: '저항 근접', count: data.watchlistSignalSummary.resistanceNearCount, type: SignalCardType.resistance),
-                    _SignalCard(label: '주의', count: data.watchlistSignalSummary.warningCount, type: SignalCardType.warning),
-                  ];
-                  if (AppBreakpoints.isVeryNarrow(constraints.maxWidth)) {
-                    return Column(children: [for (final c in cards) Padding(padding: const EdgeInsets.only(bottom: 8), child: c)]);
-                  }
-                  return Row(children: [for (var i = 0; i < cards.length; i++) ...[Expanded(child: cards[i]), if (i < cards.length - 1) const SizedBox(width: 10)]]);
-                },
+              Row(
+                children: [
+                  Expanded(
+                    child: _SignalCard(
+                      label: '지지 확인',
+                      count: data.watchlistSignalSummary.supportNearCount,
+                      type: SignalCardType.support,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _SignalCard(
+                      label: '저항 근접',
+                      count: data.watchlistSignalSummary.resistanceNearCount,
+                      type: SignalCardType.resistance,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _SignalCard(
+                      label: '주의',
+                      count: data.watchlistSignalSummary.warningCount,
+                      type: SignalCardType.warning,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: AppSpacing.sectionLarge),
               MarketSnapshotSection(snapshots: [data.popularStocks, data.foreignNetBuy, data.institutionNetBuy]),
@@ -192,10 +222,15 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _TodayPointCard extends StatelessWidget {
-  const _TodayPointCard({required this.todayLabel, required this.headline});
+  const _TodayPointCard({
+    required this.todayLabel,
+    required this.headline,
+    required this.briefs,
+  });
 
   final String todayLabel;
   final String headline;
+  final List<_TodayBrief> briefs;
 
   @override
   Widget build(BuildContext context) {
@@ -213,9 +248,80 @@ class _TodayPointCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Text(headline, maxLines: 3, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, color: Color(0xFFE2E8F0), height: 1.5, fontWeight: FontWeight.w500)),
+          Text(
+            headline,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFFE2E8F0),
+              height: 1.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...briefs.map(
+            (brief) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: _TodayBriefRow(brief: brief),
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _TodayBrief {
+  const _TodayBrief({
+    required this.label,
+    required this.items,
+  });
+
+  final String label;
+  final List<String> items;
+}
+
+class _TodayBriefRow extends StatelessWidget {
+  const _TodayBriefRow({required this.brief});
+
+  final _TodayBrief brief;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = brief.items.isEmpty
+        ? '데이터 준비 중'
+        : brief.items.take(3).join(', ');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            brief.label,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF93C5FD),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFFCBD5E1),
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
