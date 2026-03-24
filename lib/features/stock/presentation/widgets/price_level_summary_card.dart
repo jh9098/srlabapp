@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_breakpoints.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../data/stock_models.dart';
 
@@ -28,7 +29,7 @@ class PriceLevelSummaryCard extends StatelessWidget {
             else ...[
               if (supportLevels.isNotEmpty) ...[
                 _LevelGroup(title: '지지선', color: const Color(0xFF16A34A), levels: supportLevels),
-                if (resistanceLevels.isNotEmpty) const SizedBox(height: 12),
+                if (resistanceLevels.isNotEmpty) const SizedBox(height: 18),
               ],
               if (resistanceLevels.isNotEmpty)
                 _LevelGroup(title: '저항선', color: const Color(0xFFDC2626), levels: resistanceLevels),
@@ -54,22 +55,44 @@ class _LevelGroup extends StatelessWidget {
       children: [
         Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(color: color, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
-        ...levels.map(
-          (level) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                Expanded(child: Text('$title ${level.levelOrder}')),
-                Text(Formatters.price(level.levelPrice)),
-                const SizedBox(width: 8),
-                Text(
-                  level.distancePct == null ? '-' : '${Formatters.percent(level.distancePct!, signed: true)} 거리',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-        ),
+        ...levels.map((level) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final narrow = AppBreakpoints.isNarrow(constraints.maxWidth);
+                  if (narrow) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(child: Text('$title ${level.levelOrder}')),
+                            Text(Formatters.price(level.levelPrice), style: const TextStyle(fontFeatures: [])),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(level.distancePct == null ? '거리 -' : '${Formatters.percent(level.distancePct!, signed: true)} 거리', style: Theme.of(context).textTheme.bodySmall),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(child: Text('$title ${level.levelOrder}')),
+                      SizedBox(width: 92, child: Text(Formatters.price(level.levelPrice), textAlign: TextAlign.end)),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: 80,
+                        child: Text(
+                          level.distancePct == null ? '-' : '${Formatters.percent(level.distancePct!, signed: true)}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                          textAlign: TextAlign.end,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            )),
       ],
     );
   }

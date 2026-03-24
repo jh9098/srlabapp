@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/widgets/app_sticky_bottom_bar.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_state.dart';
 import '../../app/app_scope.dart';
@@ -98,21 +99,15 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('알림 설정'),
-        actions: [
-          TextButton(
-            onPressed: _saving ? null : _save,
-            child: _saving
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('저장'),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('알림 설정')),
       body: _buildBody(),
+      bottomNavigationBar: AppStickyBottomBar(
+        child: FilledButton.icon(
+          onPressed: _saving ? null : _save,
+          icon: _saving ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.check_rounded),
+          label: const Text('설정 저장'),
+        ),
+      ),
     );
   }
 
@@ -147,10 +142,12 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
 
   Widget _buildSettingsList(AlertSettingsModel draft) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
       children: [
         // 전체 알림 마스터 스위치
         Card(
+          color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25),
           child: SwitchListTile(
             secondary: Icon(
               draft.pushEnabled
@@ -249,22 +246,10 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
           ),
         ),
 
-        const SizedBox(height: 24),
-
-        FilledButton.icon(
-          onPressed: _saving ? null : _save,
-          icon: _saving
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : const Icon(Icons.check_rounded),
-          label: const Text('설정 저장'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        ),
+        if (AppScope.of(context).config.useFirebaseOnly) ...[
+          const SizedBox(height: 12),
+          Text('현재 Firebase 직독 모드에서는 로컬 기본값 기준으로 동작합니다.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey.shade600)),
+        ],
       ],
     );
   }

@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
+import '../../../core/widgets/loading_state.dart';
 import '../../app/app_scope.dart';
 import '../../shared/controllers/watchlist_controller.dart';
 import '../data/stock_models.dart';
@@ -20,6 +22,7 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
   final _controller = TextEditingController();
   Timer? _debounce;
   List<StockSearchItemModel> _items = const [];
+  final List<String> _recent = [];
   bool _loading = false;
   String? _error;
 
@@ -31,7 +34,8 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
   }
 
   Future<void> _search(String query) async {
-    if (query.trim().isEmpty) {
+    final keyword = query.trim();
+    if (keyword.isEmpty) {
       setState(() {
         _items = const [];
         _error = null;
@@ -45,19 +49,18 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
     try {
       final scope = AppScope.of(context);
       final items = scope.config.useFirebaseOnly && scope.firebaseStockRepository != null
-          ? await scope.firebaseStockRepository!.searchStocks(query.trim())
-          : await scope.stockRepository.searchStocks(query.trim());
+          ? await scope.firebaseStockRepository!.searchStocks(keyword)
+          : await scope.stockRepository.searchStocks(keyword);
       setState(() {
         _items = items;
+        _recent.remove(keyword);
+        _recent.insert(0, keyword);
+        if (_recent.length > 6) _recent.removeLast();
       });
     } catch (error) {
-      setState(() {
-        _error = error.toString();
-      });
+      setState(() => _error = error.toString());
     } finally {
-      setState(() {
-        _loading = false;
-      });
+      setState(() => _loading = false);
     }
   }
 
@@ -72,19 +75,48 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
           return Column(
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
                 child: TextField(
                   controller: _controller,
-                  decoration: const InputDecoration(
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: _search,
+                  decoration: InputDecoration(
                     hintText: '종목명 또는 종목코드를 입력하세요',
-                    prefixIcon: Icon(Icons.search_rounded),
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _controller.text.trim().isEmpty
+                        ? null
+                        : IconButton(
+                            onPressed: () {
+                              _controller.clear();
+                              _search('');
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
                   ),
                   onChanged: (value) {
+                    setState(() {});
                     _debounce?.cancel();
-                    _debounce = Timer(const Duration(milliseconds: 350), () => _search(value));
+                    _debounce = Timer(const Duration(milliseconds: 300), () => _search(value));
                   },
                 ),
               ),
+              if (_controller.text.trim().isEmpty && _recent.isNotEmpty)
+                SizedBox(
+                  height: 42,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: _recent
+                        .map((q) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ActionChip(label: Text(q), onPressed: () {
+                                _controller.text = q;
+                                _search(q);
+                              }),
+                            ))
+                        .toList(),
+                  ),
+                ),
               Expanded(child: _buildBody(watchlistController)),
             ],
           );
@@ -95,28 +127,29 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
 
   Widget _buildBody(WatchlistController watchlistController) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, AppSpacing.bottomListPadding),
+        children: const [LoadingState(compact: true, message: '검색 결과를 불러오는 중...')],
+      );
     }
     if (_error != null) {
-      return ErrorState(message: _error!, onRetry: () { _search(_controller.text); });
+      return ErrorState(message: _error!, onRetry: () => _search(_controller.text));
     }
     if (_controller.text.trim().isEmpty) {
-      return const EmptyState(
+      return EmptyState(
         title: '찾고 싶은 종목을 입력하세요',
-        description: '이름이나 코드로 검색하면 바로 관심종목에 추가할 수 있습니다.',
+        description: '예시: 삼성전자, 에코프로비엠, 005930',
         icon: Icons.search_rounded,
       );
     }
     if (_items.isEmpty) {
-      return const EmptyState(
-        title: '검색 결과가 없습니다',
-        description: '검색어를 다시 확인하거나 다른 종목명으로 시도해보세요.',
-      );
+      return const EmptyState(title: '검색 결과가 없습니다', description: '검색어를 다시 확인하거나 다른 종목명으로 시도해보세요.');
     }
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, AppSpacing.bottomListPadding),
       itemCount: _items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final item = _items[index];
         final scope = AppScope.of(context);
@@ -124,22 +157,17 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
         final existing = watchlistController.findByStockCode(item.stockCode);
         return Card(
           child: ListTile(
-            title: Text(item.stockName),
+            title: Text(item.stockName, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text('${item.stockCode} · ${item.marketType}'),
             trailing: !enablePersonalWatchlist
-                ? const Chip(label: Text('Firebase 직독'))
-                : existing != null
-                    ? FilledButton.tonal(
-                        onPressed: () async => watchlistController.remove(existing.watchlistId),
-                        child: const Text('삭제'),
-                      )
-                    : FilledButton(
-                        onPressed: () async => watchlistController.add(item.stockCode),
-                        child: const Text('추가'),
-                      ),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: item.stockCode)),
-            ),
+                ? const Chip(label: Text('조회 전용'))
+                : SizedBox(
+                    height: 36,
+                    child: existing != null
+                        ? FilledButton.tonal(onPressed: () async => watchlistController.remove(existing.watchlistId), child: const Text('삭제'))
+                        : FilledButton(onPressed: () async => watchlistController.add(item.stockCode), child: const Text('추가')),
+                  ),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: item.stockCode))),
           ),
         );
       },

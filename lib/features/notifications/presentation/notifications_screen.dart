@@ -14,6 +14,7 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
+  bool _showUnreadOnly = false;
   Future<List<NotificationItemModel>>? _future;
   bool _initialized = false;
 
@@ -53,6 +54,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('알림함'),
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(42), child: Padding(padding: const EdgeInsets.fromLTRB(16,0,16,8), child: Row(children:[ChoiceChip(label: const Text('전체'), selected: !_showUnreadOnly, onSelected: (_) => setState(() => _showUnreadOnly = false)), const SizedBox(width:8), ChoiceChip(label: const Text('안읽음'), selected: _showUnreadOnly, onSelected: (_) => setState(() => _showUnreadOnly = true))]))),
         actions: [
           IconButton(
             onPressed: _refresh,
@@ -76,8 +78,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             );
           }
 
-          final items =
-              snapshot.data ?? const <NotificationItemModel>[];
+          final sourceItems = snapshot.data ?? const <NotificationItemModel>[];
+          final items = _showUnreadOnly ? sourceItems.where((e) => !e.isRead).toList() : sourceItems;
 
           if (items.isEmpty) {
             return const EmptyState(
@@ -90,7 +92,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView.separated(
-              padding: const EdgeInsets.all(16),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               itemCount: items.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
@@ -244,14 +247,14 @@ class _NotificationCard extends StatelessWidget {
               if (!item.isRead)
                 Padding(
                   padding: const EdgeInsets.only(left: 8, top: 2),
-                  child: Container(
+                  child: Tooltip(message: '읽음 처리', child: Container(
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.primary,
                       shape: BoxShape.circle,
                     ),
-                  ),
+                  )),
                 )
               else
                 const Padding(

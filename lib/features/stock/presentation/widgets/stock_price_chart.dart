@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_breakpoints.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../data/stock_models.dart';
 
@@ -51,12 +52,12 @@ class StockPriceChart extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          height: 260,
+          height: AppBreakpoints.isVeryNarrow(MediaQuery.sizeOf(context).width) ? 230 : 260,
           child: CustomPaint(
             painter: _StockPriceChartPainter(
               bars: bars,
-              supportLevels: supportLevels,
-              resistanceLevels: resistanceLevels,
+              supportLevels: supportLevels.take(2).toList(),
+              resistanceLevels: resistanceLevels.take(2).toList(),
               currentPrice: currentPrice,
               minPrice: minPrice,
               maxPrice: maxPrice,
@@ -65,24 +66,27 @@ class StockPriceChart extends StatelessWidget {
             child: const SizedBox.expand(),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
-            _LegendChip(label: '종가 라인', color: Theme.of(context).colorScheme.primary),
+            _LegendChip(label: '종가', color: Theme.of(context).colorScheme.primary),
             if (supportLevels.isNotEmpty) const _LegendChip(label: '지지선', color: Color(0xFF16A34A)),
             if (resistanceLevels.isNotEmpty) const _LegendChip(label: '저항선', color: Color(0xFFDC2626)),
             if (currentPrice > 0) const _LegendChip(label: '현재가', color: Color(0xFFF59E0B)),
           ],
         ),
         const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('최저 ${Formatters.price(minPrice)}', style: Theme.of(context).textTheme.bodySmall),
-            Text('최고 ${Formatters.price(maxPrice)}', style: Theme.of(context).textTheme.bodySmall),
-          ],
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('최저 ${Formatters.price(minPrice)}', style: Theme.of(context).textTheme.bodySmall),
+              Text('최고 ${Formatters.price(maxPrice)}', style: Theme.of(context).textTheme.bodySmall),
+            ],
+          ),
         ),
       ],
     );
@@ -130,10 +134,11 @@ class _StockPriceChartPainter extends CustomPainter {
     _drawLevelLines(canvas, chartRect, supportLevels, const Color(0xFF16A34A));
     _drawLevelLines(canvas, chartRect, resistanceLevels, const Color(0xFFDC2626));
     if (currentPrice > 0) {
-      _drawHorizontalLine(canvas, chartRect, currentPrice, const Color(0xFFF59E0B), dash: true, label: '현재');
+      _drawHorizontalLine(canvas, chartRect, currentPrice, const Color(0xFFF59E0B), dash: true, label: '현재', paintLabel: false);
     }
 
-    final sortedBars = [...bars]..sort((a, b) {
+    final sortedBars = [...bars]
+      ..sort((a, b) {
         final left = a.tradeDate?.millisecondsSinceEpoch ?? 0;
         final right = b.tradeDate?.millisecondsSinceEpoch ?? 0;
         return left.compareTo(right);
@@ -198,10 +203,9 @@ class _StockPriceChartPainter extends CustomPainter {
     Color color, {
     required String label,
     bool dash = false,
+    bool paintLabel = true,
   }) {
-    if (price <= 0) {
-      return;
-    }
+    if (price <= 0) return;
     final y = _priceToY(price, rect);
     final paint = Paint()
       ..color = color.withValues(alpha: 0.82)
@@ -219,6 +223,7 @@ class _StockPriceChartPainter extends CustomPainter {
       canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), paint);
     }
 
+    if (!paintLabel) return;
     final textPainter = TextPainter(
       text: TextSpan(
         text: '$label ${Formatters.compactPrice(price)}',
@@ -230,9 +235,7 @@ class _StockPriceChartPainter extends CustomPainter {
   }
 
   double _priceToY(double price, Rect rect) {
-    if ((maxPrice - minPrice).abs() < 0.0001) {
-      return rect.center.dy;
-    }
+    if ((maxPrice - minPrice).abs() < 0.0001) return rect.center.dy;
     final paddedRange = (maxPrice - minPrice) * 0.08;
     final top = maxPrice + paddedRange;
     final bottom = minPrice - paddedRange;
@@ -261,7 +264,7 @@ class _LegendChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
@@ -269,13 +272,9 @@ class _LegendChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
           const SizedBox(width: 6),
-          Text(label, style: Theme.of(context).textTheme.labelMedium),
+          Text(label, style: Theme.of(context).textTheme.labelSmall),
         ],
       ),
     );
@@ -306,11 +305,7 @@ class _ChartPlaceholder extends StatelessWidget {
           const SizedBox(height: 12),
           Text(title, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          Text(
-            description,
-            style: Theme.of(context).textTheme.bodyMedium,
-            textAlign: TextAlign.center,
-          ),
+          Text(description, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
         ],
       ),
     );

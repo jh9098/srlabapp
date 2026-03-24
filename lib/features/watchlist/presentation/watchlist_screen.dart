@@ -4,6 +4,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_state.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/stock_card.dart';
 import '../../app/app_scope.dart';
 import '../../home/data/home_models.dart';
@@ -20,6 +21,8 @@ class WatchlistScreen extends StatefulWidget {
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
   late WatchlistController _controller;
+  String _filter = '전체';
+  String _sort = '최근 추가순';
   Future<List<HomeFeaturedStockModel>>? _operatorFallbackFuture;
   bool _fallbackInitialized = false;
 
@@ -137,87 +140,120 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
   Widget _buildUserWatchlist() {
     final summary = _controller.summary;
+    final filtered = _controller.items.where((item) {
+      if (_filter == '전체') return true;
+      if (_filter == '지지') return item.summary.contains('지지');
+      if (_filter == '저항') return item.summary.contains('저항');
+      return item.summary.contains('주의') || item.summary.contains('이탈');
+    }).toList();
+
+    if (_sort == '변동률순') {
+      filtered.sort((a, b) => b.changePct.compareTo(a.changePct));
+    } else if (_sort == '지지 근접순') {
+      filtered.sort((a, b) => (a.nearestSupport?.distancePct ?? 999).compareTo(b.nearestSupport?.distancePct ?? 999));
+    }
+
     return RefreshIndicator(
       onRefresh: _controller.load,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
         children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final f in const ['전체', '지지', '저항', '주의'])
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(label: Text(f), selected: _filter == f, onSelected: (_) => setState(() => _filter = f)),
+                  ),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: _sort,
+                  items: const ['최근 추가순', '지지 근접순', '변동률순']
+                      .map((v) => DropdownMenuItem(value: v, child: Text(v)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _sort = v ?? _sort),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           if (summary != null)
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Wrap(
-                  spacing: 16,
-                  runSpacing: 12,
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
                     _SummaryChip(label: '전체', value: summary.totalCount),
-                    _SummaryChip(label: '지지 확인', value: summary.supportNearCount),
-                    _SummaryChip(label: '저항 근접', value: summary.resistanceNearCount),
+                    _SummaryChip(label: '지지', value: summary.supportNearCount),
+                    _SummaryChip(label: '저항', value: summary.resistanceNearCount),
                     _SummaryChip(label: '주의', value: summary.warningCount),
                   ],
                 ),
               ),
             ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Card(
             color: Colors.blueGrey.shade50,
             child: const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                '이 탭은 내 개인 관심종목입니다.\n'
-                '운영 watchlist(Firebase에서 가져온 종목)는 종목 상세에서 지지/저항/상태를 확인할 수 있고, '
-                '추가 버튼으로 내 관심종목에 담을 수 있습니다.',
-              ),
+              padding: EdgeInsets.all(14),
+              child: Text('내 관심종목 중심으로 신호를 빠르게 확인하고, 좌측 스와이프로 바로 삭제할 수 있습니다.'),
             ),
           ),
-          const SizedBox(height: 16),
-          ..._controller.items.map(
-            (item) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: StockCard(
-                name: item.stockName,
-                code: item.stockCode,
-                price: item.currentPrice,
-                changePct: item.changePct,
-                status: StatusBadge(status: item.status),
-                summary: item.summary,
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (item.nearestSupport != null)
-                      Text(
-                        '가까운 지지선 ${item.nearestSupport!.price.toInt()}원 · 거리 '
-                        '${item.nearestSupport!.distancePct?.toStringAsFixed(2) ?? '-'}%',
-                      ),
-                    if (item.nearestResistance != null)
-                      Text(
-                        '가까운 저항선 ${item.nearestResistance!.price.toInt()}원 · 거리 '
-                        '${item.nearestResistance!.distancePct?.toStringAsFixed(2) ?? '-'}%',
-                      ),
-                  ],
-                ),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (value) async {
-                    if (value == 'delete') {
+          const SizedBox(height: 12),
+          if (filtered.isEmpty)
+            EmptyState(
+              title: '조건에 맞는 관심종목이 없습니다',
+              description: '필터를 변경하거나 새 종목을 추가해 보세요.',
+              actionLabel: '종목 검색하기',
+              onAction: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StockSearchScreen())),
+            )
+          else
+            ...filtered.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Dismissible(
+                    key: ValueKey(item.watchlistId),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(color: Colors.red.shade400, borderRadius: BorderRadius.circular(16)),
+                      child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
+                    ),
+                    onDismissed: (_) async {
                       await _controller.remove(item.watchlistId);
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'delete', child: Text('관심종목 삭제')),
-                  ],
-                ),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => StockDetailScreen(stockCode: item.stockCode),
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${item.stockName} 삭제됨'),
+                          action: SnackBarAction(label: '실행취소', onPressed: () => _controller.add(item.stockCode)),
+                        ),
+                      );
+                    },
+                    child: StockCard(
+                      name: item.stockName,
+                      code: item.stockCode,
+                      price: item.currentPrice,
+                      changePct: item.changePct,
+                      status: StatusBadge(status: item.status),
+                      summary: item.summary,
+                      trailing: FilledButton.tonal(
+                        onPressed: () async => _controller.remove(item.watchlistId),
+                        child: const Text('삭제'),
+                      ),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: item.stockCode))),
+                    ),
                   ),
-                ),
-              ),
-            ),
-          ),
+                )),
         ],
       ),
     );
   }
+
 }
 
 class _OperatorWatchlistFallback extends StatelessWidget {
@@ -271,7 +307,8 @@ class _OperatorWatchlistFallback extends StatelessWidget {
         return RefreshIndicator(
           onRefresh: onReload,
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
             children: [
               Card(
                 color: Colors.amber.shade50,
@@ -308,9 +345,7 @@ class _OperatorWatchlistFallback extends StatelessWidget {
                       changePct: item.changePct,
                       status: StatusBadge(status: item.status),
                       summary: item.summary,
-                      subtitle: const Text(
-                        '운영 관심종목 미리보기 · 상세 화면에서 지지선/저항선/상태 확인',
-                      ),
+                      subtitle: const Text('운영 관심종목 미리보기'),
                       trailing: !allowPersonalActions
                           ? const Chip(label: Text('운영 종목'))
                           : alreadyAdded

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_breakpoints.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_state.dart';
@@ -130,7 +132,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
               return RefreshIndicator(
                 onRefresh: _reload,
                 child: ListView(
-                  padding: const EdgeInsets.all(16),
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
                   children: [
                     // ─────────────────────────────
                     // [FIX] 헤더 카드: 딥 네이비 다크 스타일
@@ -257,10 +260,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                           : Wrap(
                               spacing: 8,
                               runSpacing: 8,
-                              children: detail.relatedThemes
-                                  .map((theme) =>
-                                      Chip(label: Text(theme.name)))
-                                  .toList(),
+                              children: detail.relatedThemes.take(4).map((theme) => Chip(label: Text(theme.name))).toList(),
                             ),
                     ),
                     if (detail.relatedContents.isNotEmpty) ...[
@@ -268,7 +268,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                       _SectionCard(
                         title: '관련 콘텐츠',
                         child: Column(
-                          children: detail.relatedContents
+                          children: detail.relatedContents.take(3)
                               .map(
                                 (content) => ListTile(
                                   contentPadding: EdgeInsets.zero,
@@ -330,7 +330,7 @@ class _DarkHeaderCard extends StatelessWidget {
   final String? watchlistId;
   final bool alertEnabled;
   final bool enablePersonalWatchlist;
-  final dynamic watchlistController; // WatchlistController
+  final dynamic watchlistController;
 
   @override
   Widget build(BuildContext context) {
@@ -346,7 +346,6 @@ class _DarkHeaderCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 종목 코드 + 상태 뱃지
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -356,23 +355,14 @@ class _DarkHeaderCard extends StatelessWidget {
                     children: [
                       Text(
                         '${detail.stock.stockCode} · ${detail.stock.marketType}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF60A5FA),
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.04,
-                        ),
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF60A5FA), fontWeight: FontWeight.w600),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 4),
                       Text(
-                        detail.stock.stockName.isEmpty
-                            ? stockCode
-                            : detail.stock.stockName,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFFF8FAFC),
-                        ),
+                        detail.stock.stockName.isEmpty ? stockCode : detail.stock.stockName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: Color(0xFFF8FAFC)),
                       ),
                     ],
                   ),
@@ -381,131 +371,84 @@ class _DarkHeaderCard extends StatelessWidget {
                 StatusBadge(status: detail.status),
               ],
             ),
-            const SizedBox(height: 14),
-            // 현재가 + 등락률
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
+            const SizedBox(height: 12),
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 10,
               children: [
                 Text(
                   Formatters.price(detail.price.currentPrice),
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Colors.white),
                 ),
-                const SizedBox(width: 10),
                 Text(
                   Formatters.percent(detail.price.changePct),
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: isUp
-                        ? const Color(0xFFF87171)
-                        : const Color(0xFF60A5FA),
+                    color: isUp ? const Color(0xFFF87171) : const Color(0xFF60A5FA),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            // 메트릭 그리드
+            const SizedBox(height: 12),
             _buildMetricGrid(latestDate),
-            const SizedBox(height: 18),
-            // 차트
+            const SizedBox(height: 16),
             StockPriceChart(
               bars: detail.validChartBars,
               supportLevels: detail.supportLevels,
               resistanceLevels: detail.resistanceLevels,
               currentPrice: detail.price.currentPrice,
             ),
-            const SizedBox(height: 16),
-            // 구분선
+            const SizedBox(height: 12),
             const Divider(color: Color(0xFF1E293B), height: 1),
-            const SizedBox(height: 14),
-            // 관심종목 행
+            const SizedBox(height: 12),
             Row(
               children: [
                 Icon(
-                  isInWatchlist
-                      ? Icons.bookmark_rounded
-                      : Icons.bookmark_border_rounded,
-                  color: isInWatchlist
-                      ? const Color(0xFFF59E0B)
-                      : const Color(0xFF64748B),
+                  isInWatchlist ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                  color: isInWatchlist ? const Color(0xFFF59E0B) : const Color(0xFF64748B),
                   size: 20,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  isInWatchlist ? '관심종목에 등록됨' : '아직 관심종목에 없음',
-                  style: TextStyle(
-                    color: isInWatchlist
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0xFF64748B),
-                    fontSize: 13,
+                Expanded(
+                  child: Text(
+                    isInWatchlist ? '관심종목 등록됨' : '관심종목 미등록',
+                    style: TextStyle(
+                      color: isInWatchlist ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
+                      fontSize: 13,
+                    ),
                   ),
                 ),
-                const Spacer(),
                 if (!enablePersonalWatchlist)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text('Firebase 직독',
-                        style: TextStyle(
-                            color: Color(0xFF94A3B8), fontSize: 11)),
-                  )
+                  const Chip(label: Text('조회 전용'))
                 else if (!isInWatchlist || watchlistId == null)
                   FilledButton.icon(
-                    onPressed: () async =>
-                        watchlistController.add(stockCode),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D4ED8),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                    ),
+                    onPressed: () async => watchlistController.add(stockCode),
                     icon: const Icon(Icons.add_rounded, size: 16),
-                    label: const Text('관심종목 추가',
-                        style: TextStyle(fontSize: 13)),
+                    label: const Text('관심종목 추가'),
                   )
                 else
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        alertEnabled ? '알림 켜짐' : '알림 꺼짐',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: alertEnabled
-                              ? const Color(0xFF60A5FA)
-                              : const Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Switch(
-                        value: alertEnabled,
-                        activeColor: const Color(0xFF60A5FA),
-                        onChanged: (value) =>
-                            watchlistController.toggleAlert(
-                          watchlistId: watchlistId,
-                          alertEnabled: value,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () async =>
-                            watchlistController.remove(watchlistId),
-                        icon: const Icon(Icons.delete_outline_rounded,
-                            color: Color(0xFF64748B), size: 20),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
+                  FilledButton.tonalIcon(
+                    onPressed: () async => watchlistController.remove(watchlistId),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                    label: const Text('삭제'),
                   ),
               ],
             ),
+            if (enablePersonalWatchlist && isInWatchlist && watchlistId != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  const Text('알림 받기', style: TextStyle(color: Color(0xFFCBD5E1))),
+                  const Spacer(),
+                  Switch(
+                    value: alertEnabled,
+                    activeThumbColor: const Color(0xFF60A5FA),
+                    onChanged: (value) => watchlistController.toggleAlert(watchlistId: watchlistId, alertEnabled: value),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -514,76 +457,68 @@ class _DarkHeaderCard extends StatelessWidget {
 
   Widget _buildMetricGrid(DateTime? latestDate) {
     final metrics = [
-      _MetricData(
-          label: '고가', value: Formatters.price(detail.price.dayHigh)),
-      _MetricData(
-          label: '저가', value: Formatters.price(detail.price.dayLow)),
-      _MetricData(
-          label: '거래량',
-          value: _formatVolume(detail.price.volume)),
-      _MetricData(
-          label: '기준일',
-          value:
-              latestDate == null ? '-' : Formatters.date(latestDate)),
+      _MetricData(label: '고가', value: Formatters.price(detail.price.dayHigh)),
+      _MetricData(label: '저가', value: Formatters.price(detail.price.dayLow)),
+      _MetricData(label: '거래량', value: _formatVolume(detail.price.volume)),
+      _MetricData(label: '기준일', value: latestDate == null ? '-' : Formatters.date(latestDate)),
     ];
 
-    return Row(
-      children: metrics
-          .map(
-            (m) => Expanded(
-              child: Container(
-                margin: const EdgeInsets.only(right: 6),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      m.label,
-                      style: const TextStyle(
-                          fontSize: 9, color: Color(0xFF60A5FA)),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      m.value,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFF1F5F9),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          )
-          .toList(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoByTwo = AppBreakpoints.isNarrow(constraints.maxWidth);
+        if (twoByTwo) {
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: metrics
+                .map((m) => SizedBox(width: (constraints.maxWidth - 8) / 2, child: _MetricTile(metric: m)))
+                .toList(),
+          );
+        }
+        return Row(children: metrics.map((m) => Expanded(child: _MetricTile(metric: m))).toList());
+      },
     );
   }
 
   String _formatVolume(int volume) {
-    if (volume >= 1000000) {
-      return '${(volume / 1000000).toStringAsFixed(1)}M';
-    } else if (volume >= 1000) {
-      return '${(volume / 1000).toStringAsFixed(0)}K';
-    }
+    if (volume >= 1000000) return '${(volume / 1000000).toStringAsFixed(1)}M';
+    if (volume >= 1000) return '${(volume / 1000).toStringAsFixed(0)}K';
     return volume.toString();
   }
 }
 
+
 class _MetricData {
   const _MetricData({required this.label, required this.value});
+
   final String label;
   final String value;
 }
 
-// ══════════════════════════════════════════
-// [FIX] 시나리오 라인 — 색상 뱃지 구분
-// ══════════════════════════════════════════
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({required this.metric});
+
+  final _MetricData metric;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(metric.label, style: const TextStyle(fontSize: 9, color: Color(0xFF60A5FA))),
+          const SizedBox(height: 3),
+          Text(metric.value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFF1F5F9))),
+        ],
+      ),
+    );
+  }
+}
 
 enum _ScenarioType { base, bull, bear }
 

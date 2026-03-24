@@ -72,24 +72,43 @@ class _ShortsScreenState extends State<ShortsScreen> {
         return RefreshIndicator(
           onRefresh: _reload,
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final item = items[index];
               return Card(
-                child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.play_arrow_rounded),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: !item.hasExternalLink ? null : () => launchUrl(Uri.parse(item.externalUrl!)),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(color: Theme.of(context).colorScheme.primaryContainer, borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.play_circle_fill_rounded),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children:[Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(999)), child: Text('콘텐츠', style: Theme.of(context).textTheme.labelSmall)), const SizedBox(width: 6)]),
+                              const SizedBox(height: 6),
+                              Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 4),
+                              Text(item.summary ?? '요약이 없습니다.', maxLines: 2, overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
+                        if (item.hasExternalLink) const Icon(Icons.open_in_new_rounded, size: 18),
+                      ],
+                    ),
                   ),
-                  title: Text(item.title),
-                  subtitle: Text(item.summary ?? '요약이 없습니다.'),
-                  trailing: item.hasExternalLink
-                      ? const Icon(Icons.open_in_new_rounded)
-                      : null,
-                  onTap: !item.hasExternalLink
-                      ? null
-                      : () => launchUrl(Uri.parse(item.externalUrl!)),
                 ),
               );
             },

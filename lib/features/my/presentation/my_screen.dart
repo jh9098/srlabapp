@@ -7,6 +7,7 @@ import '../../app/app_scope.dart';
 import '../../notifications/presentation/notifications_screen.dart';
 import '../../user/domain/feature_access.dart';
 import '../../user/domain/user_profile.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/theme_mode_controller.dart';
 import 'alert_settings_screen.dart';
 
@@ -55,7 +56,7 @@ class MyScreen extends StatelessWidget {
 
   Widget _buildLoggedOutLayout(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
       children: [
         const SizedBox(height: 24),
         const _ProfilePlaceholder(),
@@ -73,7 +74,7 @@ class MyScreen extends StatelessWidget {
 
   Widget _buildSimpleLayout(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
       children: [
         _buildMenuCard(context, profile: null),
         const SizedBox(height: 16),
@@ -95,7 +96,7 @@ class MyScreen extends StatelessWidget {
     final isAdmin = FeatureAccess.canOpenAdmin(profile);
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
       children: [
         _ProfileCard(authUser: user, profile: profile, onSignOut: onSignOut),
         const SizedBox(height: 16),
@@ -176,7 +177,7 @@ class MyScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.chat_outlined),
             title: const Text('카카오 오픈채팅'),
-            subtitle: const Text('매매 전략 질문 · 운영 문의'),
+            subtitle: const Text('링크 준비 중 · 추후 실제 주소로 연결됩니다'),
             trailing: const Icon(Icons.open_in_new_rounded, size: 18),
             onTap: () => _launchUrl(
               context,
@@ -188,7 +189,7 @@ class MyScreen extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.send_outlined),
             title: const Text('텔레그램 채널'),
-            subtitle: const Text('공지 · 실시간 신호 알림'),
+            subtitle: const Text('링크 준비 중 · 추후 실제 주소로 연결됩니다'),
             trailing: const Icon(Icons.open_in_new_rounded, size: 18),
             onTap: () => _launchUrl(
               context,
@@ -267,6 +268,7 @@ class _ProfilePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: const Color(0xFFF5F3FF),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor:
@@ -277,7 +279,7 @@ class _ProfilePlaceholder extends StatelessWidget {
           ),
         ),
         title: const Text('로그인이 필요합니다'),
-        subtitle: const Text('로그인하면 알림과 관심종목을 관리할 수 있어요.'),
+        subtitle: const Text('로그인하면 관심종목/알림/개인화 기능을 바로 사용할 수 있어요.'),
       ),
     );
   }
@@ -430,6 +432,7 @@ class _AdminCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         side: const BorderSide(color: Color(0xFFDDD6FE), width: 1),
       ),
+      color: const Color(0xFFF5F3FF),
       child: ListTile(
         leading: Container(
           width: 40,

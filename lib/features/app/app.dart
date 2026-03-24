@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/config/app_config.dart';
 import '../../core/navigation/app_navigator.dart';
 import '../../core/push/push_notification_service.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_mode_controller.dart';
 import '../auth/presentation/auth_gate.dart';
@@ -62,6 +63,8 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   int _index = 0;
+
+  final List<String> _titles = const ['지지저항Lab', '관심종목', '테마', '콘텐츠', '마이'];
   bool _didBootstrap = false;
   // 푸시 배너: 실패한 경우에만 1회 표시 후 자동 닫힘
   String? _pushWarningMessage;
@@ -135,15 +138,35 @@ class _AppShellState extends State<AppShell> {
 
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: AppSpacing.pageHorizontal,
         title: Text(
-          _index == 0 ? '지지저항Lab' : _destinations[_index].label,
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          _titles[_index],
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         actions: [
-          IconButton(
-            onPressed: appNavigator.openNotifications,
-            icon: const Icon(Icons.notifications_outlined),
-            tooltip: '알림함',
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: IconButton(
+              onPressed: appNavigator.openNotifications,
+              icon: Stack(
+                children: [
+                  const Icon(Icons.notifications_outlined, size: 22),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.error,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              tooltip: '알림함',
+            ),
           ),
         ],
       ),
@@ -182,8 +205,11 @@ class _AppShellState extends State<AppShell> {
         onDestinationSelected: (index) => setState(() => _index = index),
         destinations: _destinations,
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: _index == 1
-          ? FloatingActionButton.extended(
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: FloatingActionButton.extended(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => const StockSearchScreen(),
@@ -191,6 +217,7 @@ class _AppShellState extends State<AppShell> {
               ),
               icon: const Icon(Icons.add_rounded),
               label: const Text('종목 추가'),
+            ),
             )
           : null,
     );

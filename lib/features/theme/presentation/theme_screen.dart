@@ -76,7 +76,8 @@ class _ThemeScreenState extends State<ThemeScreen> {
         return RefreshIndicator(
           onRefresh: _reload,
           child: ListView.separated(
-            padding: const EdgeInsets.all(16),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             itemCount: themes.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
@@ -125,38 +126,28 @@ class _ThemeScreenState extends State<ThemeScreen> {
                           children: [
                             Chip(label: Text('연결 종목 ${theme.stockCount}개')),
                             if (theme.leaderStock != null)
-                              ActionChip(
-                                label: Text('대장주 ${theme.leaderStock!.stockName}'),
-                                onPressed: () => Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => StockDetailScreen(
-                                      stockCode:
-                                          theme.leaderStock!.stockCode,
-                                    ),
+                              InkWell(
+                                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: theme.leaderStock!.stockCode))),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primaryContainer,
+                                    borderRadius: BorderRadius.circular(999),
                                   ),
+                                  child: Text('대장 ${theme.leaderStock!.stockName}', style: Theme.of(context).textTheme.labelSmall),
                                 ),
                               ),
                           ],
                         ),
                         if (theme.followerStocks.isNotEmpty) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 10),
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
-                            children: theme.followerStocks
-                                .map(
-                                  (stock) => ActionChip(
-                                    label: Text(stock.stockName),
-                                    onPressed: () => Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => StockDetailScreen(
-                                          stockCode: stock.stockCode,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
+                            children: [
+                              ...theme.followerStocks.take(3).map((stock) => ActionChip(label: Text(stock.stockName), onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => StockDetailScreen(stockCode: stock.stockCode))))),
+                              if (theme.followerStocks.length > 3) Chip(label: Text('+${theme.followerStocks.length - 3}')),
+                            ],
                           ),
                         ],
                       ],

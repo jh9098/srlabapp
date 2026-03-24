@@ -93,7 +93,8 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
           return RefreshIndicator(
             onRefresh: _reload,
             child: ListView(
-              padding: const EdgeInsets.all(16),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
               children: [
                 Card(
                   child: Padding(
@@ -109,7 +110,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                                   ),
                         ),
                         const SizedBox(height: 8),
-                        Text(detail.theme.summary ?? '테마 설명이 아직 없습니다.'),
+                        Text(detail.theme.summary ?? '테마 설명이 아직 없습니다.', maxLines: 3, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 8,
@@ -145,6 +146,7 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                   ...detail.stocks.map(
                     (stock) => Card(
                       child: ListTile(
+                        dense: true,
                         title: Text(stock.stockName),
                         subtitle: Text(stock.stockCode),
                         trailing: const Icon(Icons.chevron_right_rounded),
@@ -174,8 +176,8 @@ class _ThemeDetailScreenState extends State<ThemeDetailScreen> {
                   ...detail.recentContents.map(
                     (content) => Card(
                       child: ListTile(
-                        title: Text(content.title),
-                        subtitle: Text(content.summary ?? '요약이 없습니다.'),
+                        title: Text(content.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(content.summary ?? '요약이 없습니다.', maxLines: 2, overflow: TextOverflow.ellipsis),
                         trailing: content.hasExternalLink
                             ? const Icon(Icons.open_in_new_rounded)
                             : null,
