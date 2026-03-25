@@ -239,6 +239,50 @@ flutter run \
 
 ---
 
+## 5-6. Netlify 배포 (Flutter Web + Firebase)
+
+이 저장소는 Netlify용 설정 파일을 포함합니다.
+
+- `netlify.toml`: 배포 publish 경로 + SPA redirect 설정
+- `scripts/netlify_build.sh`: Flutter web 빌드 + `--dart-define` 주입 스크립트
+
+### Netlify Build command
+
+```bash
+./scripts/netlify_build.sh
+```
+
+### Netlify Publish directory
+
+```text
+build/web
+```
+
+### Netlify 필수 환경변수
+
+아래 4개가 비어 있으면 빌드가 실패하도록 보호되어 있습니다.
+
+- `FIREBASE_API_KEY`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_MESSAGING_SENDER_ID`
+- `FIREBASE_WEB_APP_ID`
+
+### Netlify 권장 환경변수
+
+- `APP_ENV=prod`
+- `USE_FIREBASE_ONLY=true`
+- `ENABLE_BACKEND_FEATURES=false`
+- `USER_IDENTIFIER=netlify-web-user`
+- `FIREBASE_AUTH_DOMAIN`
+- `FIREBASE_STORAGE_BUCKET`
+- `FIREBASE_MEASUREMENT_ID`
+- `FIREBASE_WEB_VAPID_KEY` (웹 푸시를 실제 사용할 때)
+- `API_BASE_URL` (백엔드 기능을 켤 때만 필요)
+
+백엔드 API를 같이 쓰지 않는 순수 Firebase 모드면 `API_BASE_URL`은 비워도 됩니다.
+
+---
+
 ## 6. admin_web 실행 방법
 
 관리자 웹은 정적 HTML/JS 기반입니다.
