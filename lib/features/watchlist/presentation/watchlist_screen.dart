@@ -8,6 +8,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/stock_card.dart';
 import '../../app/app_scope.dart';
 import '../../home/data/home_models.dart';
+import '../data/watchlist_models.dart';
 import '../../shared/controllers/watchlist_controller.dart';
 import '../../stock/presentation/stock_detail_screen.dart';
 import '../../stock/presentation/stock_search_screen.dart';
@@ -21,7 +22,7 @@ class WatchlistScreen extends StatefulWidget {
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
   late WatchlistController _controller;
-  String _filter = '전체';
+  String _filter = WatchlistStatusFilter.all;
   String _sort = '최근 추가순';
   Future<List<HomeFeaturedStockModel>>? _operatorFallbackFuture;
   bool _fallbackInitialized = false;
@@ -140,12 +141,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 
   Widget _buildUserWatchlist() {
     final summary = _controller.summary;
-    final filtered = _controller.items.where((item) {
-      if (_filter == '전체') return true;
-      if (_filter == '지지') return item.summary.contains('지지');
-      if (_filter == '저항') return item.summary.contains('저항');
-      return item.summary.contains('주의') || item.summary.contains('이탈');
-    }).toList();
+    final filtered = _controller.items
+        .where((item) => WatchlistStatusFilter.matches(_filter, item.status.code))
+        .toList();
 
     if (_sort == '변동률순') {
       filtered.sort((a, b) => b.changePct.compareTo(a.changePct));
@@ -163,7 +161,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                for (final f in const ['전체', '지지', '저항', '주의'])
+                for (final f in WatchlistStatusFilter.labels)
                   Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: ChoiceChip(label: Text(f), selected: _filter == f, onSelected: (_) => setState(() => _filter = f)),

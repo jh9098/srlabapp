@@ -15,7 +15,7 @@ class AuthRepository {
   final String _googleClientId;
   final String _googleServerClientId;
 
-  static Future<void>? _googleInitFuture;
+  Future<void>? _googleInitFuture;
   PendingUserProfileSeed? _pendingUserProfileSeed;
 
   Stream<User?> authStateChanges() => _auth.authStateChanges();

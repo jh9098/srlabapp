@@ -1,6 +1,30 @@
 import '../../../core/utils/json_parsers.dart';
 import '../../shared/models/common_models.dart';
 
+class WatchlistStatusFilter {
+  static const String all = '전체';
+  static const String support = '지지';
+  static const String resistance = '저항';
+  static const String warning = '주의';
+
+  static const List<String> labels = [all, support, resistance, warning];
+
+  static bool matches(String filter, String statusCode) {
+    switch (filter) {
+      case all:
+        return true;
+      case support:
+        return statusCode == 'TESTING_SUPPORT';
+      case resistance:
+        return statusCode == 'RESISTANCE_NEAR';
+      case warning:
+        return statusCode == 'INVALID' || statusCode == 'BREAK_DOWN';
+      default:
+        return true;
+    }
+  }
+}
+
 class PriceDistanceModel {
   const PriceDistanceModel({required this.price, this.distancePct});
 
@@ -50,10 +74,14 @@ class WatchlistItemModel {
       status: StatusBadgeModel.fromJson(json['status'] as Map<String, dynamic>),
       nearestSupport: json['nearest_support'] == null
           ? null
-          : PriceDistanceModel.fromJson(json['nearest_support'] as Map<String, dynamic>),
+          : PriceDistanceModel.fromJson(
+              json['nearest_support'] as Map<String, dynamic>,
+            ),
       nearestResistance: json['nearest_resistance'] == null
           ? null
-          : PriceDistanceModel.fromJson(json['nearest_resistance'] as Map<String, dynamic>),
+          : PriceDistanceModel.fromJson(
+              json['nearest_resistance'] as Map<String, dynamic>,
+            ),
       summary: json['summary'] as String,
       alertEnabled: json['alert_enabled'] as bool,
     );
@@ -109,7 +137,9 @@ class WatchlistResponseModel {
       items: (json['items'] as List<dynamic>)
           .map((item) => WatchlistItemModel.fromJson(item as Map<String, dynamic>))
           .toList(),
-      summary: WatchlistSummaryModel.fromJson(json['summary'] as Map<String, dynamic>),
+      summary: WatchlistSummaryModel.fromJson(
+        json['summary'] as Map<String, dynamic>,
+      ),
     );
   }
 }

@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/firestore_parsers.dart';
 import '../../../core/utils/json_parsers.dart';
-import '../../shared/models/common_models.dart' show StatusBadgeModel;
+import '../../../core/utils/stock_status_resolver.dart';
 import 'home_models.dart';
 
 class FirebaseHomeRepository {
@@ -18,9 +18,7 @@ class FirebaseHomeRepository {
         .limit(featuredLimit)
         .get();
 
-    final featuredStocks = await Future.wait(
-      publicWatchlist.docs.map(_buildFeaturedStock),
-    );
+    final featuredStocks = await _buildFeaturedStocks(publicWatchlist.docs);
 
     final marketDocs = await Future.wait([
       _latestDoc('popularStocks'),
@@ -64,16 +62,57 @@ class FirebaseHomeRepository {
     );
   }
 
-  Future<HomeFeaturedStockModel> _buildFeaturedStock(
-    QueryDocumentSnapshot<Map<String, dynamic>> watchlistDoc,
+  Future<List<HomeFeaturedStockModel>> _buildFeaturedStocks(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> watchlistDocs,
   ) async {
+    final tickers = watchlistDocs
+        .map((doc) => normalizeTicker(doc.data()['ticker']))
+        .where((ticker) => ticker.isNotEmpty)
+        .toSet()
+        .toList();
+    final priceMap = await _loadPriceMap(tickers);
+
+    return watchlistDocs
+        .map((watchlistDoc) => _buildFeaturedStock(
+              watchlistDoc,
+              priceMap[normalizeTicker(watchlistDoc.data()['ticker'])],
+            ))
+        .toList();
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _loadPriceMap(
+    List<String> tickers,
+  ) async {
+    if (tickers.isEmpty) {
+      return const {};
+    }
+
+    final result = <String, Map<String, dynamic>>{};
+    const chunkSize = 10;
+
+    for (var i = 0; i < tickers.length; i += chunkSize) {
+      final end = (i + chunkSize > tickers.length) ? tickers.length : i + chunkSize;
+      final chunk = tickers.sublist(i, end);
+      final snapshot = await _firestore
+          .collection('stock_prices')
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      for (final doc in snapshot.docs) {
+        result[doc.id] = doc.data();
+      }
+    }
+
+    return result;
+  }
+
+  HomeFeaturedStockModel _buildFeaturedStock(
+    QueryDocumentSnapshot<Map<String, dynamic>> watchlistDoc,
+    Map<String, dynamic>? priceData,
+  ) {
     final watchData = watchlistDoc.data();
     final ticker = normalizeTicker(watchData['ticker']);
-    final priceSnapshot = ticker.isEmpty
-        ? null
-        : await _firestore.collection('stock_prices').doc(ticker).get();
-    final priceData = priceSnapshot?.data() ?? const <String, dynamic>{};
-    final priceSummary = parseFirestorePriceSummary(priceData);
+    final normalizedPriceData = priceData ?? const <String, dynamic>{};
+    final priceSummary = parseFirestorePriceSummary(normalizedPriceData);
     final supportLines = parseFirestoreDoubleList(watchData['supportLines']);
     final resistanceLines = parseFirestoreDoubleList(watchData['resistanceLines']);
     final supportPrice = _resolveSupportPrice(
@@ -84,14 +123,16 @@ class FirebaseHomeRepository {
     return HomeFeaturedStockModel(
       watchlistDocId: watchlistDoc.id,
       stockCode: ticker,
-      stockName: (watchData['name'] as String?) ?? (priceData['name'] as String?) ?? ticker,
+      stockName: (watchData['name'] as String?) ??
+          (normalizedPriceData['name'] as String?) ??
+          ticker,
       currentPrice: priceSummary.currentPrice,
       changePct: priceSummary.changePct,
       supportPrice: supportPrice,
-      status: _resolveStatus(
+      status: StockStatusResolver.resolve(
         currentPrice: priceSummary.currentPrice,
-        supportLines: supportLines,
-        resistanceLines: resistanceLines,
+        supportLevels: supportLines,
+        resistanceLevels: resistanceLines,
       ),
       summary: (watchData['memo'] as String?)?.trim().isNotEmpty == true
           ? (watchData['memo'] as String).trim()
@@ -166,43 +207,6 @@ class FirebaseHomeRepository {
     }).toList();
   }
 
-  StatusBadgeModel _resolveStatus({
-    required double currentPrice,
-    required List<double> supportLines,
-    required List<double> resistanceLines,
-  }) {
-    if (currentPrice <= 0) {
-      return const StatusBadgeModel(code: 'WAITING', label: '가격 대기', severity: 'neutral');
-    }
-
-    final nearestSupportGap = _nearestGapPercent(currentPrice, supportLines);
-    final nearestResistanceGap = _nearestGapPercent(currentPrice, resistanceLines);
-
-    if (nearestSupportGap != null && nearestSupportGap <= 2) {
-      return const StatusBadgeModel(
-        code: 'TESTING_SUPPORT',
-        label: '지지선 근접',
-        severity: 'watch',
-      );
-    }
-    if (nearestResistanceGap != null && nearestResistanceGap <= 2) {
-      return const StatusBadgeModel(
-        code: 'RESISTANCE_NEAR',
-        label: '저항선 근접',
-        severity: 'warning',
-      );
-    }
-    return const StatusBadgeModel(code: 'REUSABLE', label: '관찰 중', severity: 'neutral');
-  }
-
-  double? _nearestGapPercent(double currentPrice, List<double> levels) {
-    if (levels.isEmpty || currentPrice <= 0) {
-      return null;
-    }
-    final gaps = levels.map((level) => ((currentPrice - level).abs() / level) * 100).toList();
-    gaps.sort();
-    return gaps.first;
-  }
 
   double? _resolveSupportPrice({
     required Map<String, dynamic> watchData,
