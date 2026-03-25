@@ -11,6 +11,7 @@ class NotificationItemModel {
     required this.retryCount,
     required this.isRead,
     required this.createdAt,
+    this.firestoreDocumentId,
   });
 
   final int notificationId;
@@ -24,6 +25,7 @@ class NotificationItemModel {
   final int retryCount;
   final bool isRead;
   final DateTime createdAt;
+  final String? firestoreDocumentId;
 
   factory NotificationItemModel.fromJson(Map<String, dynamic> json) {
     return NotificationItemModel(
@@ -38,6 +40,7 @@ class NotificationItemModel {
       retryCount: json['retry_count'] as int? ?? 0,
       isRead: json['is_read'] as bool,
       createdAt: DateTime.parse(json['created_at'] as String),
+      firestoreDocumentId: null,
     );
   }
 }

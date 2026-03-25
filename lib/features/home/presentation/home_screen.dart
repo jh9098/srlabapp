@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_exception.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
-import '../../../core/widgets/loading_state.dart';
+import '../../../core/widgets/section_header.dart';
 import '../../app/app_scope.dart';
 import '../../stock/presentation/stock_detail_screen.dart';
 import '../../theme/data/theme_repository.dart';
@@ -60,19 +62,15 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!shouldFallback) rethrow;
       final themes = await _themeRepository.fetchThemes();
       final contents = await _themeRepository.fetchContents(limit: 4);
+      final fallback = HomeResponseModel.fallback(
+        headline: '운영 종목 상태 계산 중입니다. 테마와 콘텐츠는 먼저 확인할 수 있습니다.',
+        themes: themes,
+        recentContents: contents,
+      );
       return _HomeScreenPayload(
         isFallback: true,
         fallbackReason: e.message,
-        data: HomeResponseModel(
-          marketHeadline: '운영 종목 상태 계산 중입니다. 테마와 콘텐츠는 먼저 확인할 수 있습니다.',
-          featuredStocks: const [],
-          watchlistSignalSummary: const HomeWatchlistSignalSummaryModel(supportNearCount: 0, resistanceNearCount: 0, warningCount: 0),
-          popularStocks: const HomeMarketSnapshotModel(title: '인기 종목', items: []),
-          foreignNetBuy: const HomeMarketSnapshotModel(title: '외국인 순매수', items: []),
-          institutionNetBuy: const HomeMarketSnapshotModel(title: '기관 순매수', items: []),
-          themes: themes,
-          recentContents: contents,
-        ),
+        data: fallback,
       );
     }
   }
@@ -87,7 +85,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return FutureBuilder<_HomeScreenPayload>(
       future: _future,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const LoadingState();
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const _HomeSkeletonView();
+        }
         if (snapshot.hasError) return ErrorState(message: '홈 데이터를 불러오지 못했습니다.\n${snapshot.error}', onRetry: _refresh);
         final payload = snapshot.data;
         if (payload == null) return ErrorState(message: '홈 데이터를 받을 수 없습니다.', onRetry: _refresh);
@@ -98,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onRefresh: _refresh,
           child: ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
+            padding: AppSpacing.pageFull,
             children: [
               _TodayPointCard(
                 todayLabel: _todayLabel(),
@@ -119,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               const SizedBox(height: AppSpacing.sectionLarge),
-              _SectionHeader(title: '오늘의 관찰 종목', trailingLabel: '${data.featuredStocks.length}종목'),
+              SectionHeader(title: '오늘의 관찰 종목', trailingLabel: '${data.featuredStocks.length}종목'),
               const SizedBox(height: 10),
               if (payload.isFallback)
                 EmptyState(title: '신호 데이터를 분석하고 있습니다', description: '잠시 후 자동으로 업데이트됩니다.', actionLabel: '다시 조회', onAction: _refresh)
@@ -140,7 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
               ],
               const SizedBox(height: AppSpacing.section),
-              const _SectionHeader(title: '관심종목 신호 요약', subtitle: '내가 본 종목 중 오늘 체크할 개수입니다.'),
+              const SectionHeader(title: '관심종목 신호 요약', subtitle: '내가 본 종목 중 오늘 체크할 개수입니다.'),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -172,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: AppSpacing.sectionLarge),
               MarketSnapshotSection(snapshots: [data.popularStocks, data.foreignNetBuy, data.institutionNetBuy]),
               const SizedBox(height: AppSpacing.sectionLarge),
-              _SectionHeader(
+              SectionHeader(
                 title: '오늘의 테마',
                 subtitle: '강한 흐름을 짧게 확인합니다.',
                 action: TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ThemeScreen())), child: const Text('전체 보기')),
@@ -197,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     )),
               const SizedBox(height: AppSpacing.sectionLarge),
-              const _SectionHeader(title: '최근 해설/콘텐츠', subtitle: '길게 읽기 전에 핵심만 확인합니다.'),
+              const SectionHeader(title: '최근 해설/콘텐츠', subtitle: '길게 읽기 전에 핵심만 확인합니다.'),
               const SizedBox(height: 10),
               if (data.recentContents.isEmpty)
                 EmptyState(title: '최근 해설이 없습니다', description: '새로운 콘텐츠가 업로드되면 여기에 표시됩니다.', actionLabel: '다시 조회', onAction: _refresh)
@@ -221,6 +221,69 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+class _HomeSkeletonView extends StatelessWidget {
+  const _HomeSkeletonView();
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35);
+    final highlight = Theme.of(context).colorScheme.surface.withValues(alpha: 0.6);
+
+    Widget shimmerBox({required double height, double? width, BorderRadius? radius}) {
+      return Shimmer.fromColors(
+        baseColor: base,
+        highlightColor: highlight,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: radius ?? BorderRadius.circular(12),
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: AppSpacing.pageFull,
+      children: [
+        Container(
+          height: 180,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              shimmerBox(height: 12, width: 140, radius: BorderRadius.circular(999)),
+              const SizedBox(height: 12),
+              shimmerBox(height: 18, width: double.infinity),
+              const SizedBox(height: 8),
+              shimmerBox(height: 18, width: 220),
+              const SizedBox(height: 12),
+              shimmerBox(height: 20, width: 90, radius: BorderRadius.circular(999)),
+              const SizedBox(height: 8),
+              shimmerBox(height: 20, width: double.infinity, radius: BorderRadius.circular(999)),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sectionLarge),
+        shimmerBox(height: 20, width: 120),
+        const SizedBox(height: 12),
+        ...List.generate(
+          5,
+          (_) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: shimmerBox(height: 72, width: double.infinity),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _TodayPointCard extends StatelessWidget {
   const _TodayPointCard({
     required this.todayLabel,
@@ -234,17 +297,32 @@ class _TodayPointCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? AppTheme.slate800 : AppTheme.slate900;
+    final titleColor = isDark ? const Color(0xFF93C5FD) : AppTheme.blue400;
+    final dateColor = isDark ? AppTheme.slate400 : AppTheme.slate500;
+    final headlineColor = isDark ? AppTheme.slate100 : AppTheme.slate200;
     return Container(
-      decoration: BoxDecoration(color: const Color(0xFF0F172A), borderRadius: BorderRadius.circular(20)),
-      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(20)),
+      padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text('TODAY\'S POINT', style: TextStyle(fontSize: 10, color: Color(0xFF60A5FA), fontWeight: FontWeight.w700)),
+              Text(
+                'TODAY\'S POINT',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: titleColor,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const Spacer(),
-              Text(todayLabel, style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+              Text(
+                todayLabel,
+                style: TextStyle(fontSize: 10, color: dateColor),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -252,9 +330,9 @@ class _TodayPointCard extends StatelessWidget {
             headline,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: Color(0xFFE2E8F0),
+              color: headlineColor,
               height: 1.5,
               fontWeight: FontWeight.w500,
             ),
@@ -298,7 +376,7 @@ class _TodayBriefRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
+            color: AppTheme.slate800,
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
@@ -316,7 +394,7 @@ class _TodayBriefRow extends StatelessWidget {
             text,
             style: const TextStyle(
               fontSize: 12,
-              color: Color(0xFFCBD5E1),
+              color: AppTheme.slate300,
               height: 1.35,
             ),
           ),
@@ -334,38 +412,6 @@ class _HomeScreenPayload {
   final String? fallbackReason;
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, this.action, this.subtitle, this.trailingLabel});
-
-  final String title;
-  final String? subtitle;
-  final Widget? action;
-  final String? trailingLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-              if (subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(subtitle!, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade700)),
-              ],
-            ],
-          ),
-        ),
-        if (trailingLabel != null) Text(trailingLabel!, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Colors.grey.shade600, fontWeight: FontWeight.w700)),
-        if (action case final action?) action,
-      ],
-    );
-  }
-}
-
 enum SignalCardType { support, resistance, warning }
 
 class _SignalCard extends StatelessWidget {
@@ -377,7 +423,7 @@ class _SignalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = _palette();
+    final palette = _palette(Theme.of(context).brightness);
     return Container(
       decoration: BoxDecoration(color: palette.background, borderRadius: BorderRadius.circular(16), border: Border.all(color: palette.border, width: 0.5)),
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
@@ -391,14 +437,51 @@ class _SignalCard extends StatelessWidget {
     );
   }
 
-  _SignalPalette _palette() {
+  _SignalPalette _palette(Brightness brightness) {
+    final isDark = brightness == Brightness.dark;
     switch (type) {
       case SignalCardType.support:
-        return const _SignalPalette(background: Color(0xFFDCFCE7), border: Color(0xFF86EFAC), countColor: Color(0xFF166534), labelColor: Color(0xFF15803D));
+        return isDark
+            ? const _SignalPalette(
+                background: Color(0xFF14532D),
+                border: Color(0xFF166534),
+                countColor: Color(0xFF86EFAC),
+                labelColor: Color(0xFF4ADE80),
+              )
+            : const _SignalPalette(
+                background: Color(0xFFDCFCE7),
+                border: Color(0xFF86EFAC),
+                countColor: Color(0xFF166534),
+                labelColor: Color(0xFF15803D),
+              );
       case SignalCardType.resistance:
-        return const _SignalPalette(background: Color(0xFFFFEDD5), border: Color(0xFFFDBA74), countColor: Color(0xFF9A3412), labelColor: Color(0xFFC2410C));
+        return isDark
+            ? const _SignalPalette(
+                background: Color(0xFF7C2D12),
+                border: Color(0xFF9A3412),
+                countColor: Color(0xFFFDBA74),
+                labelColor: Color(0xFFFB923C),
+              )
+            : const _SignalPalette(
+                background: Color(0xFFFFEDD5),
+                border: Color(0xFFFDBA74),
+                countColor: Color(0xFF9A3412),
+                labelColor: Color(0xFFC2410C),
+              );
       case SignalCardType.warning:
-        return const _SignalPalette(background: Color(0xFFFEE2E2), border: Color(0xFFFCA5A5), countColor: Color(0xFF991B1B), labelColor: Color(0xFFB91C1C));
+        return isDark
+            ? const _SignalPalette(
+                background: Color(0xFF7F1D1D),
+                border: Color(0xFF991B1B),
+                countColor: Color(0xFFFCA5A5),
+                labelColor: Color(0xFFF87171),
+              )
+            : const _SignalPalette(
+                background: Color(0xFFFEE2E2),
+                border: Color(0xFFFCA5A5),
+                countColor: Color(0xFF991B1B),
+                labelColor: Color(0xFFB91C1C),
+              );
     }
   }
 }

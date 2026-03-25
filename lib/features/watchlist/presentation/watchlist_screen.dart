@@ -21,6 +21,12 @@ class WatchlistScreen extends StatefulWidget {
 }
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
+  static const _fallbackErrorCodes = {
+    'SUPPORT_STATE_NOT_READY',
+    'PRICE_NOT_READY',
+    'WATCHLIST_NOT_READY',
+  };
+
   late WatchlistController _controller;
   String _filter = WatchlistStatusFilter.all;
   String _sort = '최근 추가순';
@@ -77,6 +83,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       return false;
     }
     if (_controller.errorMessage == null) {
+      return true;
+    }
+
+    final errorCode = _controller.lastError?.errorCode?.toUpperCase();
+    if (errorCode != null && _fallbackErrorCodes.contains(errorCode)) {
       return true;
     }
 
@@ -155,7 +166,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       onRefresh: _controller.load,
       child: ListView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
+        padding: AppSpacing.pageFull,
         children: [
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -218,7 +229,9 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                     direction: DismissDirection.endToStart,
                     background: Container(
                       alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.pageHorizontal,
+                      ),
                       decoration: BoxDecoration(color: Colors.red.shade400, borderRadius: BorderRadius.circular(16)),
                       child: const Icon(Icons.delete_outline_rounded, color: Colors.white),
                     ),
@@ -306,12 +319,12 @@ class _OperatorWatchlistFallback extends StatelessWidget {
           onRefresh: onReload,
           child: ListView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
+            padding: AppSpacing.pageFull,
             children: [
               Card(
                 color: Colors.amber.shade50,
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
                   child: Text(
                     errorMessage == null
                         ? '개인 관심종목이 비어 있어서 운영 관심종목을 먼저 보여줍니다.\n'

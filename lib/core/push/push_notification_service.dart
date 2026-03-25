@@ -33,6 +33,7 @@ class PushNotificationService {
     required AppConfig config,
     required ApiClient apiClient,
     required AppNavigator appNavigator,
+    this.onForegroundNotification,
   })  : _config = config,
         _apiClient = apiClient,
         _messageRouter = PushMessageRouter(appNavigator);
@@ -40,7 +41,9 @@ class PushNotificationService {
   final AppConfig _config;
   final ApiClient _apiClient;
   final PushMessageRouter _messageRouter;
+  final VoidCallback? onForegroundNotification;
   bool _listenersBound = false;
+  bool _isDisposed = false;
 
   Future<PushNotificationBootstrapResult> bootstrap() async {
     if (!_config.isFirebaseConfigured) {
@@ -119,6 +122,9 @@ class PushNotificationService {
   }
 
   Future<void> _bindListeners() async {
+    if (_isDisposed) {
+      return;
+    }
     if (_listenersBound) {
       return;
     }
@@ -126,6 +132,7 @@ class PushNotificationService {
 
     FirebaseMessaging.onMessage.listen((message) async {
       debugPrint('Foreground push received: ${message.messageId} ${message.data}');
+      onForegroundNotification?.call();
       final handled = await _tryHandleSupportNearForeground(message);
       if (!handled) {
         _messageRouter.showForeground(message);
@@ -139,6 +146,9 @@ class PushNotificationService {
   }
 
   Future<void> _registerToken(String token) async {
+    if (_isDisposed) {
+      return;
+    }
     if (_config.useFirebaseOnly || !_config.enableBackendFeatures) {
       debugPrint('Skip token registration: backend not enabled');
       return;
@@ -156,6 +166,10 @@ class PushNotificationService {
         'app_version': version,
       },
     );
+  }
+
+  void dispose() {
+    _isDisposed = true;
   }
 
   Future<String> _appVersion() async {
