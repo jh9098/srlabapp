@@ -1,18 +1,28 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/navigation/app_navigator.dart';
+import '../../core/network/api_client.dart';
+import '../../core/push/push_notification_service.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_mode_controller.dart';
+import '../auth/data/auth_repository.dart';
 import '../auth/presentation/auth_gate.dart';
-import '../home/presentation/home_screen.dart';
-import '../my/presentation/my_screen.dart';
-import '../shorts/presentation/shorts_screen.dart';
-import '../stock/presentation/stock_search_screen.dart';
-import '../theme/presentation/theme_screen.dart';
-import '../watchlist/presentation/watchlist_screen.dart';
+import '../home/data/firebase_home_repository.dart';
+import '../home/data/home_repository.dart';
+import '../notifications/data/firebase_notification_repository.dart';
+import '../notifications/data/notification_repository.dart';
+import '../notifications/presentation/notification_badge_controller.dart';
 import '../shared/controllers/watchlist_controller.dart';
+import '../stock/data/firebase_stock_repository.dart';
+import '../stock/data/stock_repository.dart';
+import '../stock/presentation/stock_search_screen.dart';
+import '../theme/data/theme_repository.dart';
+import '../user/data/user_profile_repository.dart';
+import '../watchlist/data/watchlist_repository.dart';
+import 'app_shell_tabs.dart';
 import 'app_scope.dart';
 
 class SrLabApp extends StatefulWidget {
@@ -30,6 +40,21 @@ class _SrLabAppState extends State<SrLabApp> {
   late final AppNavigator _appNavigator;
   late final ThemeModeController _themeModeController;
 
+  late final ApiClient _apiClient;
+  late final HomeRepository _homeRepository;
+  late final FirebaseHomeRepository? _firebaseHomeRepository;
+  late final StockRepository _stockRepository;
+  late final FirebaseStockRepository? _firebaseStockRepository;
+  late final ThemeRepository _themeRepository;
+  late final WatchlistRepository _watchlistRepository;
+  late final NotificationRepository _notificationRepository;
+  late final FirebaseNotificationRepository? _firebaseNotificationRepository;
+  late final AuthRepository? _authRepository;
+  late final UserProfileRepository? _userProfileRepository;
+  late final PushNotificationService _pushNotificationService;
+  late final WatchlistController _watchlistController;
+  late final NotificationBadgeController _notificationBadgeController;
+
   @override
   void initState() {
     super.initState();
@@ -40,10 +65,50 @@ class _SrLabAppState extends State<SrLabApp> {
       scaffoldMessengerKey: _scaffoldMessengerKey,
     );
     _themeModeController = ThemeModeController();
+
+    _apiClient = ApiClient(config: widget.config);
+    _homeRepository = HomeRepository(_apiClient);
+    _firebaseHomeRepository =
+        widget.config.isFirebaseConfigured ? FirebaseHomeRepository() : null;
+    _stockRepository = StockRepository(_apiClient);
+    _firebaseStockRepository =
+        widget.config.isFirebaseConfigured ? FirebaseStockRepository() : null;
+    _themeRepository = ThemeRepository(_apiClient);
+    _watchlistRepository = WatchlistRepository(_apiClient);
+    _notificationRepository = NotificationRepository(_apiClient);
+    _firebaseNotificationRepository = widget.config.isFirebaseConfigured
+        ? FirebaseNotificationRepository(config: widget.config)
+        : null;
+    _authRepository = widget.config.isFirebaseConfigured
+        ? AuthRepository(
+            googleClientId: widget.config.googleClientId,
+            googleServerClientId: widget.config.googleServerClientId,
+          )
+        : null;
+    _userProfileRepository =
+        widget.config.isFirebaseConfigured ? UserProfileRepository() : null;
+    _notificationBadgeController = NotificationBadgeController();
+    _pushNotificationService = PushNotificationService(
+      config: widget.config,
+      apiClient: _apiClient,
+      appNavigator: _appNavigator,
+      onForegroundNotification: _notificationBadgeController.increment,
+    );
+    if (widget.config.isFirebaseConfigured) {
+      _notificationBadgeController.bindFirestore(
+        firestore: FirebaseFirestore.instance,
+        userIdentifier: widget.config.userIdentifier,
+      );
+    }
+    _watchlistController = WatchlistController(_watchlistRepository);
   }
 
   @override
   void dispose() {
+    _watchlistController.dispose();
+    _notificationBadgeController.dispose();
+    _pushNotificationService.dispose();
+    _apiClient.dispose();
     _themeModeController.dispose();
     super.dispose();
   }
@@ -54,60 +119,44 @@ class _SrLabAppState extends State<SrLabApp> {
       config: widget.config,
       appNavigator: _appNavigator,
       themeModeController: _themeModeController,
-      child: _AppScopeDisposer(
-        child: Builder(
-          builder: (context) {
-            final scope = AppScope.of(context);
-            return ValueListenableBuilder<ThemeMode>(
-              valueListenable: scope.themeModeController,
-              builder: (context, themeMode, _) {
-                return MaterialApp(
-                  title: '지지저항Lab',
-                  debugShowCheckedModeBanner: false,
-                  theme: AppTheme.light(),
-                  darkTheme: AppTheme.dark(),
-                  themeMode: themeMode,
-                  navigatorKey: _navigatorKey,
-                  scaffoldMessengerKey: _scaffoldMessengerKey,
-                  home: const AuthGate(
-                    child: AppShell(),
-                  ),
-                );
-              },
-            );
-          },
-        ),
+      apiClient: _apiClient,
+      homeRepository: _homeRepository,
+      firebaseHomeRepository: _firebaseHomeRepository,
+      stockRepository: _stockRepository,
+      firebaseStockRepository: _firebaseStockRepository,
+      themeRepository: _themeRepository,
+      watchlistRepository: _watchlistRepository,
+      notificationRepository: _notificationRepository,
+      firebaseNotificationRepository: _firebaseNotificationRepository,
+      notificationBadgeController: _notificationBadgeController,
+      authRepository: _authRepository,
+      userProfileRepository: _userProfileRepository,
+      pushNotificationService: _pushNotificationService,
+      watchlistController: _watchlistController,
+      child: Builder(
+        builder: (context) {
+          final scope = AppScope.of(context);
+          return ValueListenableBuilder<ThemeMode>(
+            valueListenable: scope.themeModeController,
+            builder: (context, themeMode, _) {
+              return MaterialApp(
+                title: '지지저항Lab',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.light(),
+                darkTheme: AppTheme.dark(),
+                themeMode: themeMode,
+                navigatorKey: _navigatorKey,
+                scaffoldMessengerKey: _scaffoldMessengerKey,
+                home: const AuthGate(
+                  child: AppShell(),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }
-}
-
-class _AppScopeDisposer extends StatefulWidget {
-  const _AppScopeDisposer({required this.child});
-
-  final Widget child;
-
-  @override
-  State<_AppScopeDisposer> createState() => _AppScopeDisposerState();
-}
-
-class _AppScopeDisposerState extends State<_AppScopeDisposer> {
-  WatchlistController? _watchlistController;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _watchlistController ??= AppScope.of(context).watchlistController;
-  }
-
-  @override
-  void dispose() {
-    _watchlistController?.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
 }
 
 class AppShell extends StatefulWidget {
@@ -120,58 +169,23 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
-  final List<String> _titles = const ['지지저항Lab', '관심종목', '테마', '콘텐츠', '마이'];
   bool _didBootstrap = false;
   String? _pushWarningMessage;
-
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    WatchlistScreen(),
-    ThemeScreen(),
-    ShortsScreen(),
-    MyScreen(),
-  ];
-
-  final List<NavigationDestination> _destinations = const [
-    NavigationDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home),
-      label: '홈',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.star_outline_rounded),
-      selectedIcon: Icon(Icons.star_rounded),
-      label: '관심종목',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.local_fire_department_outlined),
-      selectedIcon: Icon(Icons.local_fire_department),
-      label: '테마',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.article_outlined),
-      selectedIcon: Icon(Icons.article),
-      label: '콘텐츠',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.person_outline_rounded),
-      selectedIcon: Icon(Icons.person),
-      label: '마이',
-    ),
-  ];
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    if (_didBootstrap) {
+      return;
+    }
+    _didBootstrap = true;
 
     final scope = AppScope.of(context);
 
     if (scope.config.enableBackendFeatures) {
       scope.watchlistController.load();
     }
-
-    if (_didBootstrap) return;
-    _didBootstrap = true;
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final result = await scope.pushNotificationService.bootstrap();
@@ -188,6 +202,8 @@ class _AppShellState extends State<AppShell> {
   @override
   Widget build(BuildContext context) {
     final appNavigator = AppScope.of(context).appNavigator;
+    final badgeController = AppScope.of(context).notificationBadgeController;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
@@ -199,10 +215,23 @@ class _AppShellState extends State<AppShell> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: IconButton(
-              onPressed: appNavigator.openNotifications,
-              icon: const Icon(Icons.notifications_outlined, size: 22),
-              tooltip: '알림함',
+            child: ValueListenableBuilder<int>(
+              valueListenable: badgeController,
+              builder: (context, unreadCount, _) {
+                return IconButton(
+                  onPressed: () async {
+                    await appNavigator.openNotifications();
+                    if (!mounted) return;
+                    badgeController.reset();
+                  },
+                  icon: Badge.count(
+                    count: unreadCount,
+                    isLabelVisible: unreadCount > 0,
+                    child: const Icon(Icons.notifications_outlined, size: 22),
+                  ),
+                  tooltip: '알림함',
+                );
+              },
             ),
           ),
         ],
@@ -215,10 +244,12 @@ class _AppShellState extends State<AppShell> {
                 _pushWarningMessage!,
                 style: const TextStyle(fontSize: 13),
               ),
-              backgroundColor: const Color(0xFFFFF7ED),
-              leading: const Icon(
+              backgroundColor:
+                  isDark ? const Color(0xFF451A03) : const Color(0xFFFFF7ED),
+              leading: Icon(
                 Icons.warning_amber_rounded,
-                color: Color(0xFFB45309),
+                color:
+                    isDark ? const Color(0xFFFCD34D) : const Color(0xFFB45309),
               ),
               actions: [
                 TextButton(
@@ -238,7 +269,7 @@ class _AppShellState extends State<AppShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (index) => setState(() => _index = index),
-        destinations: _destinations,
+        destinations: kAppShellTabs.map((tab) => tab.destination).toList(),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: _index == 1
@@ -257,4 +288,7 @@ class _AppShellState extends State<AppShell> {
           : null,
     );
   }
+
+  List<String> get _titles => kAppShellTabs.map((tab) => tab.title).toList();
+  List<Widget> get _screens => kAppShellTabs.map((tab) => tab.screen).toList();
 }

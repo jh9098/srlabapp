@@ -9,4 +9,6 @@ class AppSpacing {
 
   static const EdgeInsets page = EdgeInsets.symmetric(horizontal: pageHorizontal);
   static const EdgeInsets pageWithTop = EdgeInsets.fromLTRB(pageHorizontal, 16, pageHorizontal, 0);
+  static const EdgeInsets pageFull =
+      EdgeInsets.fromLTRB(pageHorizontal, 16, pageHorizontal, bottomListPadding);
 }

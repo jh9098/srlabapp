@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_state.dart';
 import '../../app/app_scope.dart';
+import '../data/firebase_notification_repository.dart';
 import '../data/notification_models.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -23,14 +25,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     super.didChangeDependencies();
     if (_initialized) return;
     _initialized = true;
+    AppScope.of(context).notificationBadgeController.reset();
     _future = _load();
   }
 
   Future<List<NotificationItemModel>> _load() async {
     final scope = AppScope.of(context);
-    // useFirebaseOnly 모드에서는 빈 목록 반환 (Firestore 직접 연동 시 여기서 구현)
-    if (scope.config.useFirebaseOnly) {
-      return const <NotificationItemModel>[];
+    final FirebaseNotificationRepository? firebaseRepo =
+        scope.firebaseNotificationRepository;
+
+    if (firebaseRepo != null) {
+      return firebaseRepo.fetchNotifications();
     }
     return scope.notificationRepository.fetchNotifications();
   }
@@ -42,10 +47,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _markAsRead(NotificationItemModel item) async {
-    if (AppScope.of(context).config.useFirebaseOnly) return;
-    await AppScope.of(context).notificationRepository.markAsRead(
-          item.notificationId,
-        );
+    final scope = AppScope.of(context);
+    final firebaseRepo = scope.firebaseNotificationRepository;
+
+    if (firebaseRepo != null && item.firestoreDocumentId != null) {
+      await firebaseRepo.markAsRead(item.firestoreDocumentId!);
+    } else if (!scope.config.useFirebaseOnly) {
+      await scope.notificationRepository.markAsRead(item.notificationId);
+    }
+
     await _refresh();
   }
 
@@ -54,7 +64,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('알림함'),
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(42), child: Padding(padding: const EdgeInsets.fromLTRB(16,0,16,8), child: Row(children:[ChoiceChip(label: const Text('전체'), selected: !_showUnreadOnly, onSelected: (_) => setState(() => _showUnreadOnly = false)), const SizedBox(width:8), ChoiceChip(label: const Text('안읽음'), selected: _showUnreadOnly, onSelected: (_) => setState(() => _showUnreadOnly = true))]))),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(42),
+          child: _NotificationFilterBar(
+            showUnreadOnly: _showUnreadOnly,
+            onChanged: (showUnreadOnly) =>
+                setState(() => _showUnreadOnly = showUnreadOnly),
+          ),
+        ),
         actions: [
           IconButton(
             onPressed: _refresh,
@@ -66,8 +83,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       body: FutureBuilder<List<NotificationItemModel>>(
         future: _future,
         builder: (context, snapshot) {
-          if (_future == null ||
-              snapshot.connectionState != ConnectionState.done) {
+          if (_future == null || snapshot.connectionState != ConnectionState.done) {
             return const LoadingState(message: '알림을 불러오는 중입니다.');
           }
 
@@ -79,13 +95,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
 
           final sourceItems = snapshot.data ?? const <NotificationItemModel>[];
-          final items = _showUnreadOnly ? sourceItems.where((e) => !e.isRead).toList() : sourceItems;
+          final items = _showUnreadOnly
+              ? sourceItems.where((e) => !e.isRead).toList()
+              : sourceItems;
 
           if (items.isEmpty) {
             return const EmptyState(
               title: '도착한 알림이 없습니다',
               description: '지지선 접근, 반등 성공 등 중요한 신호가 생기면\n이곳에 표시됩니다.',
               icon: Icons.notifications_none_rounded,
+              isFullPage: true,
             );
           }
 
@@ -93,7 +112,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             onRefresh: _refresh,
             child: ListView.separated(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.pageHorizontal,
+                12,
+                AppSpacing.pageHorizontal,
+                AppSpacing.bottomListPadding,
+              ),
               itemCount: items.length,
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
@@ -112,6 +136,42 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               },
             ),
           );
+        },
+      ),
+    );
+  }
+}
+
+class _NotificationFilterBar extends StatelessWidget {
+  const _NotificationFilterBar({
+    required this.showUnreadOnly,
+    required this.onChanged,
+  });
+
+  final bool showUnreadOnly;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = <bool>{showUnreadOnly};
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.pageHorizontal,
+        0,
+        AppSpacing.pageHorizontal,
+        8,
+      ),
+      child: SegmentedButton<bool>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment<bool>(value: false, label: Text('전체')),
+          ButtonSegment<bool>(value: true, label: Text('안읽음')),
+        ],
+        selected: selected,
+        onSelectionChanged: (selectedValues) {
+          final unreadOnly =
+              selectedValues.isEmpty ? false : selectedValues.first;
+          onChanged(unreadOnly);
         },
       ),
     );
@@ -176,10 +236,7 @@ class _NotificationCard extends StatelessWidget {
     return Card(
       color: item.isRead
           ? null
-          : Theme.of(context)
-              .colorScheme
-              .primaryContainer
-              .withValues(alpha: 0.25),
+          : Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.25),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
@@ -188,7 +245,6 @@ class _NotificationCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 타입 아이콘
               Container(
                 width: 40,
                 height: 40,
@@ -199,8 +255,6 @@ class _NotificationCard extends StatelessWidget {
                 child: Icon(_typeIcon, color: color, size: 20),
               ),
               const SizedBox(width: 12),
-
-              // 내용
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,19 +296,20 @@ class _NotificationCard extends StatelessWidget {
                   ],
                 ),
               ),
-
-              // 읽음 처리
               if (!item.isRead)
                 Padding(
                   padding: const EdgeInsets.only(left: 8, top: 2),
-                  child: Tooltip(message: '읽음 처리', child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: BoxShape.circle,
+                  child: Tooltip(
+                    message: '읽음 처리',
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  )),
+                  ),
                 )
               else
                 const Padding(

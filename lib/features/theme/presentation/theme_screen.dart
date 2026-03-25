@@ -71,6 +71,7 @@ class _ThemeScreenState extends State<ThemeScreen> {
             description: '운영자가 오늘의 테마를 등록하면 여기에 표시됩니다.',
             actionLabel: '다시 조회',
             onAction: _reload,
+            isFullPage: true,
           );
         }
         return RefreshIndicator(

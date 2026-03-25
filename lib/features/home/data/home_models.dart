@@ -210,6 +210,27 @@ class HomeResponseModel {
   final List<ThemeItemModel> themes;
   final List<RecentContentModel> recentContents;
 
+  factory HomeResponseModel.fallback({
+    required String headline,
+    required List<ThemeItemModel> themes,
+    required List<RecentContentModel> recentContents,
+  }) {
+    return HomeResponseModel(
+      marketHeadline: headline,
+      featuredStocks: const [],
+      watchlistSignalSummary: const HomeWatchlistSignalSummaryModel(
+        supportNearCount: 0,
+        resistanceNearCount: 0,
+        warningCount: 0,
+      ),
+      popularStocks: const HomeMarketSnapshotModel(title: '인기 종목', items: []),
+      foreignNetBuy: const HomeMarketSnapshotModel(title: '외국인 순매수', items: []),
+      institutionNetBuy: const HomeMarketSnapshotModel(title: '기관 순매수', items: []),
+      themes: themes,
+      recentContents: recentContents,
+    );
+  }
+
   factory HomeResponseModel.fromJson(Map<String, dynamic> json) {
     return HomeResponseModel(
       marketHeadline: parseJsonString((json['market_summary'] as Map<String, dynamic>?)?['headline']),

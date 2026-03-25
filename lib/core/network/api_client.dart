@@ -12,12 +12,14 @@ class ApiClient {
 
   final AppConfig _config;
   final http.Client _httpClient;
+  bool _isDisposed = false;
 
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, String>? queryParameters,
     bool requiresUser = false,
   }) async {
+    _assertNotDisposed();
     final response = await _httpClient.get(
       _buildUri(path, queryParameters),
       headers: _headers(requiresUser: requiresUser),
@@ -30,6 +32,7 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool requiresUser = false,
   }) async {
+    _assertNotDisposed();
     final response = await _httpClient.post(
       _buildUri(path),
       headers: _headers(requiresUser: requiresUser),
@@ -42,6 +45,7 @@ class ApiClient {
     String path, {
     bool requiresUser = false,
   }) async {
+    _assertNotDisposed();
     final response = await _httpClient.delete(
       _buildUri(path),
       headers: _headers(requiresUser: requiresUser),
@@ -54,6 +58,7 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool requiresUser = false,
   }) async {
+    _assertNotDisposed();
     final response = await _httpClient.patch(
       _buildUri(path),
       headers: _headers(requiresUser: requiresUser),
@@ -93,5 +98,19 @@ class ApiClient {
       statusCode: response.statusCode,
       errorCode: body['error_code'] as String?,
     );
+  }
+
+  void dispose() {
+    if (_isDisposed) {
+      return;
+    }
+    _isDisposed = true;
+    _httpClient.close();
+  }
+
+  void _assertNotDisposed() {
+    if (_isDisposed) {
+      throw StateError('ApiClient가 dispose된 뒤 사용되었습니다.');
+    }
   }
 }

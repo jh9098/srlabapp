@@ -14,18 +14,20 @@ class AppNavigator {
 
   BuildContext? get _context => navigatorKey.currentContext;
 
+  static final Map<String, Future<void> Function(AppNavigator)> _routes = {
+    '/notifications': (navigator) => navigator.openNotifications(),
+  };
+
   Future<void> openTargetPath(String? targetPath) async {
     if (targetPath == null || targetPath.isEmpty) {
       await openNotifications();
       return;
     }
 
-    if (targetPath.startsWith('/stocks/')) {
-      final stockCode = targetPath.replaceFirst('/stocks/', '');
-      if (stockCode.isNotEmpty) {
-        await openStockDetail(stockCode);
-        return;
-      }
+    final staticHandler = _routes[targetPath];
+    if (staticHandler != null) {
+      await staticHandler(this);
+      return;
     }
 
     if (targetPath.startsWith('/notifications')) {
@@ -33,7 +35,23 @@ class AppNavigator {
       return;
     }
 
+    final matchedStockCode = _parseStockCode(targetPath);
+    if (matchedStockCode != null) {
+      await openStockDetail(matchedStockCode);
+      return;
+    }
+
     await openNotifications();
+  }
+
+  String? _parseStockCode(String targetPath) {
+    final regExp = RegExp(r'^/stocks/([^/?#]+)$');
+    final match = regExp.firstMatch(targetPath);
+    final stockCode = match?.group(1);
+    if (stockCode == null || stockCode.isEmpty) {
+      return null;
+    }
+    return stockCode;
   }
 
   Future<void> openStockDetail(String stockCode) async {

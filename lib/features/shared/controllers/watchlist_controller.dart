@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../core/network/api_exception.dart';
 import '../../watchlist/data/watchlist_models.dart';
 import '../../watchlist/data/watchlist_repository.dart';
 
@@ -12,20 +13,26 @@ class WatchlistController extends ChangeNotifier {
   WatchlistSummaryModel? _summary;
   bool _isLoading = false;
   String? _errorMessage;
+  ApiException? _lastError;
 
   List<WatchlistItemModel> get items => _items;
   WatchlistSummaryModel? get summary => _summary;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  ApiException? get lastError => _lastError;
 
   Future<void> load() async {
     _isLoading = true;
     _errorMessage = null;
+    _lastError = null;
     notifyListeners();
     try {
       final response = await _repository.fetchWatchlist();
       _items = response.items;
       _summary = response.summary;
+    } on ApiException catch (error) {
+      _lastError = error;
+      _errorMessage = error.toString();
     } catch (error) {
       _errorMessage = error.toString();
     } finally {

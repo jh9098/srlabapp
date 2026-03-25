@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_spacing.dart';
 import '../../app/app_scope.dart';
 import '../../home/data/home_models.dart';
 import '../../notifications/data/notification_models.dart';
@@ -77,7 +78,7 @@ class _AdminHubScreenState extends State<AdminHubScreen> {
       body: RefreshIndicator(
         onRefresh: _reload,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: AppSpacing.pageFull,
           children: [
             // 프로필 배지
             _AdminProfileBanner(
@@ -122,7 +123,7 @@ class _AdminProfileBanner extends StatelessWidget {
         color: const Color(0xFF0F172A),
         borderRadius: BorderRadius.circular(20),
       ),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
       child: Row(
         children: [
           CircleAvatar(
@@ -392,7 +393,7 @@ class _SignalPreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
         child: FutureBuilder<HomeResponseModel?>(
           future: future,
           builder: (context, snapshot) {
@@ -470,7 +471,7 @@ class _NotificationPreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
         child: FutureBuilder<List<NotificationItemModel>>(
           future: future,
           builder: (context, snapshot) {

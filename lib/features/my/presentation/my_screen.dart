@@ -55,7 +55,7 @@ class MyScreen extends StatelessWidget {
 
   Widget _buildLoggedOutLayout(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
+      padding: AppSpacing.pageFull,
       children: [
         const SizedBox(height: 24),
         const _ProfilePlaceholder(),
@@ -73,7 +73,7 @@ class MyScreen extends StatelessWidget {
 
   Widget _buildSimpleLayout(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
+      padding: AppSpacing.pageFull,
       children: [
         _buildMenuCard(context, profile: null),
         const SizedBox(height: 16),
@@ -95,7 +95,7 @@ class MyScreen extends StatelessWidget {
     final isAdmin = FeatureAccess.canOpenAdmin(profile);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
+      padding: AppSpacing.pageFull,
       children: [
         _ProfileCard(authUser: user, profile: profile, onSignOut: onSignOut),
         const SizedBox(height: 16),
@@ -220,7 +220,10 @@ class MyScreen extends StatelessWidget {
   Widget _buildAppInfoCard(BuildContext context, {required bool isAdmin}) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.pageHorizontal,
+          vertical: 12,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -350,7 +353,7 @@ class _ProfileCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
         child: Row(
           children: [
             // 아바타

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
@@ -19,18 +21,57 @@ class StockSearchScreen extends StatefulWidget {
 }
 
 class _StockSearchScreenState extends State<StockSearchScreen> {
+  static const _recentKey = 'stock_search_recent';
   final _controller = TextEditingController();
   Timer? _debounce;
   List<StockSearchItemModel> _items = const [];
   final List<String> _recent = [];
+  bool _initializingRecent = true;
   bool _loading = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreRecentSearches();
+  }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _restoreRecentSearches() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_recentKey);
+    if (raw == null || raw.isEmpty) {
+      if (!mounted) return;
+      setState(() => _initializingRecent = false);
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      _recent
+        ..clear()
+        ..addAll(
+          decoded
+              .map((item) => item.toString().trim())
+              .where((item) => item.isNotEmpty)
+              .take(6),
+        );
+    } catch (_) {
+      _recent.clear();
+    }
+    if (!mounted) return;
+    setState(() => _initializingRecent = false);
+  }
+
+  Future<void> _saveRecentSearches() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_recentKey, jsonEncode(_recent));
   }
 
   Future<void> _search(String query) async {
@@ -57,6 +98,7 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
         _recent.insert(0, keyword);
         if (_recent.length > 6) _recent.removeLast();
       });
+      await _saveRecentSearches();
     } catch (error) {
       setState(() => _error = error.toString());
     } finally {
@@ -126,6 +168,14 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
   }
 
   Widget _buildBody(WatchlistController watchlistController) {
+    if (_initializingRecent) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, AppSpacing.bottomListPadding),
+        children: const [
+          LoadingState(compact: true, message: '최근 검색어를 불러오는 중...'),
+        ],
+      );
+    }
     if (_loading) {
       return ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, AppSpacing.bottomListPadding),
@@ -140,10 +190,15 @@ class _StockSearchScreenState extends State<StockSearchScreen> {
         title: '찾고 싶은 종목을 입력하세요',
         description: '예시: 삼성전자, 에코프로비엠, 005930',
         icon: Icons.search_rounded,
+        isFullPage: true,
       );
     }
     if (_items.isEmpty) {
-      return const EmptyState(title: '검색 결과가 없습니다', description: '검색어를 다시 확인하거나 다른 종목명으로 시도해보세요.');
+      return const EmptyState(
+        title: '검색 결과가 없습니다',
+        description: '검색어를 다시 확인하거나 다른 종목명으로 시도해보세요.',
+        isFullPage: true,
+      );
     }
     return ListView.separated(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,

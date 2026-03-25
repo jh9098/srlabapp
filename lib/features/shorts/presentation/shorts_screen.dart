@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/loading_state.dart';
@@ -62,18 +63,19 @@ class _ShortsScreenState extends State<ShortsScreen> {
         final items = snapshot.data ?? const <RecentContentModel>[];
         if (items.isEmpty) {
           return EmptyState(
-            title: '쇼츠 연결 준비 중',
-            description: '관리자에서 쇼츠 또는 요약 콘텐츠를 등록하면 여기에 표시됩니다.',
-            icon: Icons.play_circle_outline_rounded,
+            title: '콘텐츠를 준비 중입니다',
+            description: '곧 새로운 해설 콘텐츠를 만나보실 수 있습니다.',
+            icon: Icons.article_outlined,
             actionLabel: '다시 조회',
             onAction: _reload,
+            isFullPage: true,
           );
         }
         return RefreshIndicator(
           onRefresh: _reload,
           child: ListView.separated(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: AppSpacing.pageFull,
             itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {

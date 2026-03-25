@@ -28,6 +28,7 @@ class StockDetailScreen extends StatefulWidget {
 
 class _StockDetailScreenState extends State<StockDetailScreen> {
   late Future<_StockDetailViewData> _future;
+  bool _initialized = false;
 
   // [FIX] AppBar 타이틀용 종목명 상태 변수 추가
   String? _stockName;
@@ -35,6 +36,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
     _future = _load();
   }
 
@@ -118,9 +121,8 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                   watchlistController.findByStockCode(widget.stockCode);
               final isInWatchlist =
                   watchItem != null || detail.watchlist.isInWatchlist;
-              final String? watchlistId = (watchItem?.watchlistId ??
-                      detail.watchlist.watchlistId)
-                  ?.toString();
+              final int? watchlistId =
+                  watchItem?.watchlistId ?? detail.watchlist.watchlistId;
 
               final alertEnabled =
                   watchItem?.alertEnabled ?? detail.watchlist.alertEnabled;
@@ -133,7 +135,7 @@ class _StockDetailScreenState extends State<StockDetailScreen> {
                 onRefresh: _reload,
                 child: ListView(
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, AppSpacing.bottomListPadding),
+                  padding: AppSpacing.pageFull,
                   children: [
                     // ─────────────────────────────
                     // [FIX] 헤더 카드: 딥 네이비 다크 스타일
@@ -327,7 +329,7 @@ class _DarkHeaderCard extends StatelessWidget {
   final DateTime? latestDate;
   final String stockCode;
   final bool isInWatchlist;
-  final String? watchlistId;
+  final int? watchlistId;
   final bool alertEnabled;
   final bool enablePersonalWatchlist;
   final dynamic watchlistController;
@@ -630,7 +632,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.pageHorizontal),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
