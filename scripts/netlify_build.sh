@@ -1,6 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ──────────────────────────────────────────────
+# 1. Flutter 설치 (Netlify에는 Flutter가 없으므로 직접 설치)
+# ──────────────────────────────────────────────
+FLUTTER_VERSION="${FLUTTER_VERSION:-3.32.0}"
+FLUTTER_CHANNEL="${FLUTTER_CHANNEL:-stable}"
+FLUTTER_HOME="$HOME/.flutter-sdk"
+export PATH="$FLUTTER_HOME/bin:$PATH"
+
+if ! command -v flutter &>/dev/null; then
+  echo "[netlify-build] Flutter ${FLUTTER_VERSION} 설치 중..."
+  git clone --depth 1 \
+    --branch "${FLUTTER_VERSION}" \
+    https://github.com/flutter/flutter.git \
+    "$FLUTTER_HOME"
+  echo "[netlify-build] Flutter 설치 완료"
+else
+  echo "[netlify-build] Flutter 이미 설치됨: $(flutter --version --machine | head -1)"
+fi
+
+# Flutter 웹 엔진 및 툴 프리워밍
+flutter precache --web --no-android --no-ios
+flutter config --enable-web
+
+# ──────────────────────────────────────────────
+# 2. 필수 환경변수 체크
+# ──────────────────────────────────────────────
 required_vars=(
   FIREBASE_API_KEY
   FIREBASE_PROJECT_ID
@@ -21,6 +47,9 @@ if (( ${#missing[@]} > 0 )); then
   exit 1
 fi
 
+# ──────────────────────────────────────────────
+# 3. 빌드
+# ──────────────────────────────────────────────
 flutter pub get
 
 flutter build web --release \
@@ -45,3 +74,5 @@ flutter build web --release \
   --dart-define=GOOGLE_SERVER_CLIENT_ID="${GOOGLE_SERVER_CLIENT_ID:-}" \
   --dart-define=KAKAO_OPENCHAT_URL="${KAKAO_OPENCHAT_URL:-}" \
   --dart-define=TELEGRAM_CHANNEL_URL="${TELEGRAM_CHANNEL_URL:-}"
+
+echo "[netlify-build] 빌드 완료 → build/web"
