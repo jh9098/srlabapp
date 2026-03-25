@@ -37,11 +37,19 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
 
     final scope = AppScope.of(context);
     if (scope.config.useFirebaseOnly) {
-      // Firebase 모드: 로컬 기본값으로 시작 (추후 Firestore 연동)
-      _draft = _defaultSettings;
+      _future = _loadLocal();
     } else {
       _future = _load();
     }
+  }
+
+
+  Future<AlertSettingsModel> _loadLocal() async {
+    final settings = await AppScope.of(context)
+        .notificationRepository
+        .loadLocalSettings();
+    if (mounted) setState(() => _draft = settings);
+    return settings;
   }
 
   Future<AlertSettingsModel> _load() async {
@@ -61,10 +69,12 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
       final scope = AppScope.of(context);
 
       if (scope.config.useFirebaseOnly) {
-        // Firebase 모드: 로컬 상태 저장 (서버 연동은 추후 구현)
-        await Future.delayed(const Duration(milliseconds: 300));
+        final saved = await scope.notificationRepository.saveLocalSettings(draft);
         if (!mounted) return;
-        setState(() => _draft = draft);
+        setState(() {
+          _draft = saved;
+          _future = Future.value(saved);
+        });
       } else {
         final saved =
             await scope.notificationRepository.updateAlertSettings(draft);
@@ -112,12 +122,6 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
   }
 
   Widget _buildBody() {
-    // Firebase 모드: 기본값으로 즉시 표시
-    if (AppScope.of(context).config.useFirebaseOnly) {
-      return _buildSettingsList(_draft ?? _defaultSettings);
-    }
-
-    // 일반 모드: FutureBuilder 로딩
     return FutureBuilder<AlertSettingsModel>(
       future: _future,
       builder: (context, snapshot) {
@@ -131,7 +135,11 @@ class _AlertSettingsScreenState extends State<AlertSettingsScreen> {
         if (snapshot.hasError && draft == null) {
           return ErrorState(
             message: '알림 설정을 불러오지 못했습니다.',
-            onRetry: () => setState(() => _future = _load()),
+            onRetry: () => setState(() {
+              _future = AppScope.of(context).config.useFirebaseOnly
+                  ? _loadLocal()
+                  : _load();
+            }),
           );
         }
 

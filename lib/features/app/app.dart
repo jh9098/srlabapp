@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/navigation/app_navigator.dart';
-import '../../core/push/push_notification_service.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/theme_mode_controller.dart';
@@ -13,45 +12,102 @@ import '../shorts/presentation/shorts_screen.dart';
 import '../stock/presentation/stock_search_screen.dart';
 import '../theme/presentation/theme_screen.dart';
 import '../watchlist/presentation/watchlist_screen.dart';
+import '../shared/controllers/watchlist_controller.dart';
 import 'app_scope.dart';
 
-class SrLabApp extends StatelessWidget {
-  SrLabApp({super.key, required this.config});
+class SrLabApp extends StatefulWidget {
+  const SrLabApp({super.key, required this.config});
 
   final AppConfig config;
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
-      GlobalKey<ScaffoldMessengerState>();
 
   @override
-  Widget build(BuildContext context) {
-    final appNavigator = AppNavigator(
+  State<SrLabApp> createState() => _SrLabAppState();
+}
+
+class _SrLabAppState extends State<SrLabApp> {
+  late final GlobalKey<NavigatorState> _navigatorKey;
+  late final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey;
+  late final AppNavigator _appNavigator;
+  late final ThemeModeController _themeModeController;
+
+  @override
+  void initState() {
+    super.initState();
+    _navigatorKey = GlobalKey<NavigatorState>();
+    _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+    _appNavigator = AppNavigator(
       navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _scaffoldMessengerKey,
     );
+    _themeModeController = ThemeModeController();
+  }
 
+  @override
+  void dispose() {
+    _themeModeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return AppScope(
-      config: config,
-      appNavigator: appNavigator,
-      child: ValueListenableBuilder<ThemeMode>(
-        valueListenable: ThemeModeController.instance,
-        builder: (context, themeMode, _) {
-          return MaterialApp(
-            title: '지지저항Lab',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light(),
-            darkTheme: AppTheme.dark(),
-            themeMode: themeMode,
-            navigatorKey: _navigatorKey,
-            scaffoldMessengerKey: _scaffoldMessengerKey,
-            home: const AuthGate(
-              child: AppShell(),
-            ),
-          );
-        },
+      config: widget.config,
+      appNavigator: _appNavigator,
+      themeModeController: _themeModeController,
+      child: _AppScopeDisposer(
+        child: Builder(
+          builder: (context) {
+            final scope = AppScope.of(context);
+            return ValueListenableBuilder<ThemeMode>(
+              valueListenable: scope.themeModeController,
+              builder: (context, themeMode, _) {
+                return MaterialApp(
+                  title: '지지저항Lab',
+                  debugShowCheckedModeBanner: false,
+                  theme: AppTheme.light(),
+                  darkTheme: AppTheme.dark(),
+                  themeMode: themeMode,
+                  navigatorKey: _navigatorKey,
+                  scaffoldMessengerKey: _scaffoldMessengerKey,
+                  home: const AuthGate(
+                    child: AppShell(),
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
+}
+
+class _AppScopeDisposer extends StatefulWidget {
+  const _AppScopeDisposer({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AppScopeDisposer> createState() => _AppScopeDisposerState();
+}
+
+class _AppScopeDisposerState extends State<_AppScopeDisposer> {
+  WatchlistController? _watchlistController;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _watchlistController ??= AppScope.of(context).watchlistController;
+  }
+
+  @override
+  void dispose() {
+    _watchlistController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class AppShell extends StatefulWidget {
@@ -66,7 +122,6 @@ class _AppShellState extends State<AppShell> {
 
   final List<String> _titles = const ['지지저항Lab', '관심종목', '테마', '콘텐츠', '마이'];
   bool _didBootstrap = false;
-  // 푸시 배너: 실패한 경우에만 1회 표시 후 자동 닫힘
   String? _pushWarningMessage;
 
   final List<Widget> _screens = const [
@@ -121,10 +176,8 @@ class _AppShellState extends State<AppShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final result = await scope.pushNotificationService.bootstrap();
       if (!mounted) return;
-      // 토큰 등록 실패 등 문제가 있을 때만 경고 배너 표시
       if (!result.didRegisterToken) {
         setState(() => _pushWarningMessage = result.message);
-        // 5초 후 자동 닫힘
         Future.delayed(const Duration(seconds: 5), () {
           if (mounted) setState(() => _pushWarningMessage = null);
         });
@@ -148,23 +201,7 @@ class _AppShellState extends State<AppShell> {
             padding: const EdgeInsets.only(right: 8),
             child: IconButton(
               onPressed: appNavigator.openNotifications,
-              icon: Stack(
-                children: [
-                  const Icon(Icons.notifications_outlined, size: 22),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.error,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              icon: const Icon(Icons.notifications_outlined, size: 22),
               tooltip: '알림함',
             ),
           ),
@@ -172,7 +209,6 @@ class _AppShellState extends State<AppShell> {
       ),
       body: Column(
         children: [
-          // 푸시 실패 시에만 배너 표시 (성공 배너는 제거)
           if (_pushWarningMessage != null)
             MaterialBanner(
               content: Text(
@@ -186,8 +222,7 @@ class _AppShellState extends State<AppShell> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () =>
-                      setState(() => _pushWarningMessage = null),
+                  onPressed: () => setState(() => _pushWarningMessage = null),
                   child: const Text('닫기'),
                 ),
               ],
@@ -210,14 +245,14 @@ class _AppShellState extends State<AppShell> {
           ? Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const StockSearchScreen(),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const StockSearchScreen(),
+                  ),
                 ),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('종목 추가'),
               ),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('종목 추가'),
-            ),
             )
           : null,
     );

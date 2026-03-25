@@ -19,6 +19,8 @@ class AppConfig {
     this.enableBackendFeatures = false,
     this.googleClientId = '',
     this.googleServerClientId = '',
+    this.kakaoOpenChatUrl = '',
+    this.telegramChannelUrl = '',
   });
 
   final String apiBaseUrl;
@@ -46,6 +48,8 @@ class AppConfig {
   /// Google 로그인용 클라이언트 설정.
   final String googleClientId;
   final String googleServerClientId;
+  final String kakaoOpenChatUrl;
+  final String telegramChannelUrl;
 
   bool get isFirebaseConfigured {
     return firebaseProjectId.isNotEmpty &&
@@ -85,7 +89,7 @@ class AppConfig {
       ),
       firebaseProjectId: String.fromEnvironment(
         'FIREBASE_PROJECT_ID',
-        defaultValue: 'stocksrlab-re',
+        defaultValue: '',
       ),
       firebaseAppId: String.fromEnvironment(
         'FIREBASE_APP_ID',
@@ -93,11 +97,11 @@ class AppConfig {
       ),
       firebaseApiKey: String.fromEnvironment(
         'FIREBASE_API_KEY',
-        defaultValue: 'AIzaSyBFkKARCzMVcVuaHMgB23HdIF-zoHPt_9E',
+        defaultValue: '',
       ),
       firebaseMessagingSenderId: String.fromEnvironment(
         'FIREBASE_MESSAGING_SENDER_ID',
-        defaultValue: '812353657196',
+        defaultValue: '',
       ),
       firebaseIosBundleId: String.fromEnvironment(
         'FIREBASE_IOS_BUNDLE_ID',
@@ -109,7 +113,7 @@ class AppConfig {
       ),
       firebaseWebAppId: String.fromEnvironment(
         'FIREBASE_WEB_APP_ID',
-        defaultValue: '1:812353657196:web:bfec508fefbe14086a7b49',
+        defaultValue: '',
       ),
       firebaseWebVapidKey: String.fromEnvironment(
         'FIREBASE_WEB_VAPID_KEY',
@@ -117,15 +121,15 @@ class AppConfig {
       ),
       firebaseAuthDomain: String.fromEnvironment(
         'FIREBASE_AUTH_DOMAIN',
-        defaultValue: 'stocksrlab-re.firebaseapp.com',
+        defaultValue: '',
       ),
       firebaseStorageBucket: String.fromEnvironment(
         'FIREBASE_STORAGE_BUCKET',
-        defaultValue: 'stocksrlab-re.firebasestorage.app',
+        defaultValue: '',
       ),
       firebaseMeasurementId: String.fromEnvironment(
         'FIREBASE_MEASUREMENT_ID',
-        defaultValue: 'G-1539BD821P',
+        defaultValue: '',
       ),
       useFirebaseOnly: useFirebaseOnly,
       enableBackendFeatures: enableBackendFeatures,
@@ -135,6 +139,14 @@ class AppConfig {
       ),
       googleServerClientId: String.fromEnvironment(
         'GOOGLE_SERVER_CLIENT_ID',
+        defaultValue: '',
+      ),
+      kakaoOpenChatUrl: String.fromEnvironment(
+        'KAKAO_OPENCHAT_URL',
+        defaultValue: '',
+      ),
+      telegramChannelUrl: String.fromEnvironment(
+        'TELEGRAM_CHANNEL_URL',
         defaultValue: '',
       ),
     );

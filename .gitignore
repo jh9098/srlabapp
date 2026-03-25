@@ -47,3 +47,7 @@ app.*.map.json
 # Local environment files
 /backend_api/.env
 .env
+
+.dart_defines.json
+.dart_defines.*.json
+!.dart_defines.example.json

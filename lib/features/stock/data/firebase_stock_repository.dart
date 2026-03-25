@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/utils/firestore_parsers.dart';
 import '../../../core/utils/json_parsers.dart';
+import '../../../core/utils/stock_status_resolver.dart';
 import '../../shared/models/common_models.dart';
 import 'stock_models.dart';
 
@@ -42,7 +43,7 @@ class FirebaseStockRepository {
           .collection('stock_prices')
           .orderBy('ticker')
           .startAt([normalized])
-          .endAt(['$normalized'])
+          .endAt(['$normalized\uf8ff'])
           .limit(limit)
           .get();
       for (final doc in byTicker.docs) {
@@ -56,7 +57,7 @@ class FirebaseStockRepository {
           .collection('stock_prices')
           .orderBy('name')
           .startAt([raw])
-          .endAt(['$raw'])
+          .endAt(['$raw\uf8ff'])
           .limit(limit)
           .get();
       for (final doc in byName.docs) {
@@ -104,10 +105,10 @@ class FirebaseStockRepository {
     final levels = _buildLevels(watchData, priceSummary.currentPrice);
     final supportLevels = levels.where((item) => item.isSupport).toList();
     final resistanceLevels = levels.where((item) => item.isResistance).toList();
-    final status = _resolveStatus(
+    final status = StockStatusResolver.resolve(
       currentPrice: priceSummary.currentPrice,
-      supportLevels: supportLevels,
-      resistanceLevels: resistanceLevels,
+      supportLevels: supportLevels.map((item) => item.levelPrice).toList(),
+      resistanceLevels: resistanceLevels.map((item) => item.levelPrice).toList(),
     );
 
     final memo = (watchData['memo'] as String?)?.trim() ?? '';
@@ -191,7 +192,7 @@ class FirebaseStockRepository {
 
   List<DailyBarModel> _parseDailyBars(Map<String, dynamic> priceData) {
     final prices = parseFirestoreMapList(priceData['prices']);
-    return prices.map((item) {
+    final bars = prices.map((item) {
       return DailyBarModel(
         tradeDate: parseFirestoreDateTime(item['date']),
         openPrice: parseJsonDouble(item['open']),
@@ -200,7 +201,10 @@ class FirebaseStockRepository {
         closePrice: parseJsonDouble(item['close']),
         volume: parseJsonInt(item['volume']),
       );
-    }).toList().reversed.take(90).toList().reversed.toList();
+    }).toList();
+
+    final startIndex = bars.length > 90 ? bars.length - 90 : 0;
+    return bars.sublist(startIndex);
   }
 
   List<StockLevelModel> _buildLevels(Map<String, dynamic> watchData, double currentPrice) {
@@ -233,32 +237,6 @@ class FirebaseStockRepository {
       );
     }
     return levels;
-  }
-
-  StatusBadgeModel _resolveStatus({
-    required double currentPrice,
-    required List<StockLevelModel> supportLevels,
-    required List<StockLevelModel> resistanceLevels,
-  }) {
-    final nearestSupport = supportLevels
-        .map((item) => item.distancePct)
-        .whereType<double>()
-        .fold<double?>(null, (prev, next) => prev == null || next < prev ? next : prev);
-    final nearestResistance = resistanceLevels
-        .map((item) => item.distancePct)
-        .whereType<double>()
-        .fold<double?>(null, (prev, next) => prev == null || next < prev ? next : prev);
-
-    if (currentPrice <= 0) {
-      return const StatusBadgeModel(code: 'WAITING', label: '가격 대기', severity: 'neutral');
-    }
-    if (nearestSupport != null && nearestSupport <= 2) {
-      return const StatusBadgeModel(code: 'TESTING_SUPPORT', label: '지지선 확인 중', severity: 'watch');
-    }
-    if (nearestResistance != null && nearestResistance <= 2) {
-      return const StatusBadgeModel(code: 'RESISTANCE_NEAR', label: '저항선 근접', severity: 'warning');
-    }
-    return const StatusBadgeModel(code: 'REUSABLE', label: '관찰 중', severity: 'neutral');
   }
 
   List<String> _buildReasonLines({

@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
@@ -98,7 +99,9 @@ class PushNotificationService {
   }
 
   Future<void> deactivateCurrentToken() async {
-    if (!_config.isFirebaseConfigured) {
+    if (!_config.isFirebaseConfigured ||
+        _config.useFirebaseOnly ||
+        !_config.enableBackendFeatures) {
       return;
     }
     await ensureFirebaseInitialized(_config);
@@ -135,8 +138,14 @@ class PushNotificationService {
     FirebaseMessaging.instance.onTokenRefresh.listen(_registerToken);
   }
 
-  Future<void> _registerToken(String token) {
-    return _apiClient.post(
+  Future<void> _registerToken(String token) async {
+    if (_config.useFirebaseOnly || !_config.enableBackendFeatures) {
+      debugPrint('Skip token registration: backend not enabled');
+      return;
+    }
+
+    final version = await _appVersion();
+    await _apiClient.post(
       'me/device-tokens',
       requiresUser: true,
       body: {
@@ -144,9 +153,18 @@ class PushNotificationService {
         'platform': _platformLabel(),
         'provider': 'fcm',
         'device_label': 'flutter-${defaultTargetPlatform.name}',
-        'app_version': '1.0.0+1',
+        'app_version': version,
       },
     );
+  }
+
+  Future<String> _appVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return '${info.version}+${info.buildNumber}';
+    } catch (_) {
+      return 'unknown';
+    }
   }
 
   Future<bool> _tryHandleSupportNearForeground(RemoteMessage message) async {

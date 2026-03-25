@@ -8,7 +8,6 @@ import '../../notifications/presentation/notifications_screen.dart';
 import '../../user/domain/feature_access.dart';
 import '../../user/domain/user_profile.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/theme/theme_mode_controller.dart';
 import 'alert_settings_screen.dart';
 
 class MyScreen extends StatelessWidget {
@@ -149,9 +148,10 @@ class MyScreen extends StatelessWidget {
         children: [
           // 다크모드 토글
           ValueListenableBuilder<ThemeMode>(
-            valueListenable: ThemeModeController.instance,
+            valueListenable: AppScope.of(context).themeModeController,
             builder: (context, mode, _) {
-              final isDark = ThemeModeController.instance.resolvedIsDark(context);
+              final controller = AppScope.of(context).themeModeController;
+              final isDark = controller.resolvedIsDark(context);
               return SwitchListTile(
                 secondary: Icon(
                   isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
@@ -161,7 +161,7 @@ class MyScreen extends StatelessWidget {
                   mode == ThemeMode.system ? '시스템 설정 따름' : (isDark ? '켜짐' : '꺼짐'),
                 ),
                 value: isDark,
-                onChanged: (_) => ThemeModeController.instance.toggle(),
+                onChanged: (_) => controller.toggle(),
               );
             },
           ),
@@ -171,31 +171,46 @@ class MyScreen extends StatelessWidget {
   }
 
   Widget _buildContactCard(BuildContext context) {
+    final config = AppScope.of(context).config;
+    final kakaoUrl = config.kakaoOpenChatUrl.trim();
+    final telegramUrl = config.telegramChannelUrl.trim();
+
+    Widget buildTile({
+      required IconData icon,
+      required String title,
+      required String subtitle,
+      required String url,
+    }) {
+      final enabled = url.isNotEmpty;
+      return ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: Text(enabled ? subtitle : '운영팀에서 링크를 준비 중입니다'),
+        trailing: Icon(
+          Icons.open_in_new_rounded,
+          size: 18,
+          color: enabled ? null : Colors.grey.shade400,
+        ),
+        enabled: enabled,
+        onTap: enabled ? () => _launchUrl(context, url) : null,
+      );
+    }
+
     return Card(
       child: Column(
         children: [
-          ListTile(
-            leading: const Icon(Icons.chat_outlined),
-            title: const Text('카카오 오픈채팅'),
-            subtitle: const Text('링크 준비 중 · 추후 실제 주소로 연결됩니다'),
-            trailing: const Icon(Icons.open_in_new_rounded, size: 18),
-            onTap: () => _launchUrl(
-              context,
-              // TODO: 실제 카카오 오픈채팅 URL로 교체
-              'https://open.kakao.com/o/srlab',
-            ),
+          buildTile(
+            icon: Icons.chat_outlined,
+            title: '카카오 오픈채팅',
+            subtitle: '운영진 채널 바로가기',
+            url: kakaoUrl,
           ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.send_outlined),
-            title: const Text('텔레그램 채널'),
-            subtitle: const Text('링크 준비 중 · 추후 실제 주소로 연결됩니다'),
-            trailing: const Icon(Icons.open_in_new_rounded, size: 18),
-            onTap: () => _launchUrl(
-              context,
-              // TODO: 실제 텔레그램 채널 URL로 교체
-              'https://t.me/srlab',
-            ),
+          buildTile(
+            icon: Icons.send_outlined,
+            title: '텔레그램 채널',
+            subtitle: '운영 공지 채널 바로가기',
+            url: telegramUrl,
           ),
         ],
       ),
