@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../home/presentation/home_screen.dart';
 import '../my/presentation/my_screen.dart';
-import '../shorts/presentation/shorts_screen.dart';
+import '../content/presentation/content_screen.dart';
 import '../theme/presentation/theme_screen.dart';
 import '../watchlist/presentation/watchlist_screen.dart';
 
@@ -48,7 +48,7 @@ const List<AppShellTab> kAppShellTabs = [
   ),
   AppShellTab(
     title: '콘텐츠',
-    screen: ShortsScreen(),
+    screen: ContentScreen(),
     destination: NavigationDestination(
       icon: Icon(Icons.article_outlined),
       selectedIcon: Icon(Icons.article),
